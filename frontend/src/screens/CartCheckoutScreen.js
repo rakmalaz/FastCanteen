@@ -87,8 +87,9 @@ export default function CartCheckoutScreen({ navigation }) {
         Alert.alert('Gagal Memesan', res.data.message || 'Terjadi kesalahan.');
       }
     } catch (err) {
+      const serverDetail = err.response?.data?.error ? ` (${err.response.data.error})` : '';
       const msg =
-        err.response?.data?.message || err.message || 'Gagal memproses pesanan';
+        (err.response?.data?.message || err.message || 'Gagal memproses pesanan') + serverDetail;
       Alert.alert('Kesalahan', msg);
     } finally {
       setSubmitting(false);

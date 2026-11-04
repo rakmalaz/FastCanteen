@@ -130,17 +130,30 @@ exports.createPesanan = async (req, res) => {
         const judulNotif = 'Pesanan Baru Masuk! 🛎️';
         const pesanNotif = `Pesanan #${newPesananId} dari ${namaMahasiswa} sebesar Rp ${Number(totalHarga).toLocaleString('id-ID')} telah masuk. Mohon segera diproses.`;
 
-        await connection.query(
-            `INSERT INTO notifikasi (id_penerima, id_pengirim, id_pesanan, judul, pesan, tipe, is_read, created_at)
-             VALUES (?, ?, ?, ?, ?, 'pesanan_baru', 0, NOW())`,
-            [
-                tenantData.id_admin_pendaftar,
-                id_mahasiswa,
-                newPesananId,
-                judulNotif,
-                pesanNotif
-            ]
-        );
+        // Ambil penerima notifikasi (admin pendaftar tenant atau fallback ke admin)
+        let idPenerimaNotif = tenantData.id_admin_pendaftar;
+        if (!idPenerimaNotif) {
+            const [adminRows] = await connection.query("SELECT id FROM pengguna WHERE peran = 'admin' LIMIT 1");
+            if (adminRows.length > 0) idPenerimaNotif = adminRows[0].id;
+        }
+
+        if (idPenerimaNotif) {
+            try {
+                await connection.query(
+                    `INSERT INTO notifikasi (id_penerima, id_pengirim, id_pesanan, judul, pesan, tipe, is_read, created_at)
+                     VALUES (?, ?, ?, ?, ?, 'pesanan_baru', 0, NOW())`,
+                    [
+                        idPenerimaNotif,
+                        id_mahasiswa,
+                        newPesananId,
+                        judulNotif,
+                        pesanNotif
+                    ]
+                );
+            } catch (notifErr) {
+                console.warn('⚠️ Notifikasi tenant gagal dibuat (non-fatal):', notifErr.message);
+            }
+        }
 
         await connection.commit();
 
@@ -163,11 +176,11 @@ exports.createPesanan = async (req, res) => {
         });
     } catch (error) {
         if (connection) await connection.rollback();
-        console.error('Error saat membuat pesanan:', error);
+        console.error('❌ Error saat membuat pesanan:', error);
         res.status(500).json({
             success: false,
             message: 'Gagal membuat pesanan',
-            error: error.message
+            error: error.sqlMessage || error.message
         });
     } finally {
         if (connection) connection.release();

@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
 // IP Wi-Fi aktual laptop di jaringan lokal (Wi-Fi)
-const ACTIVE_WIFI_IP = '192.168.1.252';
+const ACTIVE_WIFI_IP = '192.168.1.28';
 
 const getBaseURL = () => {
   if (Platform.OS === 'web') {
