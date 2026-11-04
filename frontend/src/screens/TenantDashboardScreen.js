@@ -41,6 +41,13 @@ export default function TenantDashboardScreen({ navigation }) {
   const [newMenuFoto, setNewMenuFoto] = useState('');
   const [submittingMenu, setSubmittingMenu] = useState(false);
 
+  // Modal Kirim Notifikasi Langsung ke Mahasiswa (Poin 7)
+  const [notifModalVisible, setNotifModalVisible] = useState(false);
+  const [targetOrderForNotif, setTargetOrderForNotif] = useState(null);
+  const [notifTitle, setNotifTitle] = useState('');
+  const [notifMessage, setNotifMessage] = useState('');
+  const [sendingNotif, setSendingNotif] = useState(false);
+
   const fetchData = async () => {
     try {
       const [orderRes, summaryRes, menuRes] = await Promise.all([
@@ -92,13 +99,52 @@ export default function TenantDashboardScreen({ navigation }) {
   // Ubah Status Pesanan (US-08)
   const handleUpdateStatus = async (orderId, newStatus) => {
     try {
-      const res = await API.put(`/pesanan/${orderId}/status`, { status: newStatus });
+      const res = await API.put(`/pesanan/${orderId}/status`, { status_pesanan: newStatus });
       if (res.data.success) {
-        Alert.alert('Sukses', `Pesanan #${orderId} kini berstatus "${newStatus}".`);
+        Alert.alert('Sukses 🎉', `Pesanan #${orderId} kini berstatus "${newStatus}". Notifikasi otomatis dikirim ke mahasiswa.`);
         fetchData();
       }
     } catch (err) {
-      Alert.alert('Gagal Mengubah Status', err.message);
+      Alert.alert('Gagal Mengubah Status', err.response?.data?.message || err.message);
+    }
+  };
+
+  // Kirim Notifikasi Langsung / Custom ke Mahasiswa (Poin 7)
+  const openNotifModal = (order) => {
+    setTargetOrderForNotif(order);
+    setNotifTitle(`Update Pesanan #${order.id} dari ${tenantName}`);
+    setNotifMessage('');
+    setNotifModalVisible(true);
+  };
+
+  const handleSendCustomNotification = async () => {
+    if (!targetOrderForNotif) return;
+    if (!notifMessage.trim()) {
+      Alert.alert('Pesan Kosong', 'Harap tulis pesan notifikasi untuk mahasiswa.');
+      return;
+    }
+
+    setSendingNotif(true);
+    try {
+      const res = await API.post('/notifikasi', {
+        id_penerima: targetOrderForNotif.id_mahasiswa,
+        id_pengirim: user?.id,
+        id_pesanan: targetOrderForNotif.id,
+        judul: notifTitle.trim() || `Notifikasi dari ${tenantName}`,
+        pesan: notifMessage.trim(),
+        tipe: 'info',
+      });
+
+      if (res.data.success) {
+        Alert.alert('Notifikasi Terkirim! 🔔', `Pesan berhasil dikirim langsung ke ${targetOrderForNotif.nama_mahasiswa}.`);
+        setNotifModalVisible(false);
+        setNotifMessage('');
+        setTargetOrderForNotif(null);
+      }
+    } catch (err) {
+      Alert.alert('Gagal Mengirim', err.response?.data?.message || err.message);
+    } finally {
+      setSendingNotif(false);
     }
   };
 
@@ -172,7 +218,8 @@ export default function TenantDashboardScreen({ navigation }) {
 
   const filteredOrders = orders.filter((o) => {
     if (statusFilter === 'Semua') return true;
-    return o.status === statusFilter;
+    const currentStatus = o.status_pesanan || o.status;
+    return currentStatus === statusFilter;
   });
 
   return (
@@ -294,7 +341,7 @@ export default function TenantDashboardScreen({ navigation }) {
         <>
           {/* Sub-Filter Status */}
           <View style={styles.statusFilterRow}>
-            {['Semua', 'Diproses', 'Siap Diambil', 'Selesai'].map((st) => {
+            {['Semua', 'Menunggu', 'Diproses', 'Siap Diambil', 'Selesai'].map((st) => {
               const isSelected = statusFilter === st;
               return (
                 <TouchableOpacity
@@ -346,13 +393,17 @@ export default function TenantDashboardScreen({ navigation }) {
                 </View>
               }
               renderItem={({ item }) => {
-                const isDiproses = item.status === 'Diproses';
-                const isSiap = item.status === 'Siap Diambil';
-                const isSelesai = item.status === 'Selesai';
+                const stPesanan = item.status_pesanan || item.status || 'Menunggu';
+                const stBayar = item.status_pembayaran || 'Sudah Dibayar';
+                const isMenunggu = stPesanan === 'Menunggu';
+                const isDiproses = stPesanan === 'Diproses';
+                const isSiap = stPesanan === 'Siap Diambil';
+                const isSelesai = stPesanan === 'Selesai';
+                const isDibatalkan = stPesanan === 'Dibatalkan';
 
                 return (
                   <View style={styles.orderCard}>
-                    {/* Top Row: Order ID, Waktu & Jam Pengambilan */}
+                    {/* Top Row: Order ID, Waktu */}
                     <View style={styles.orderCardTop}>
                       <View>
                         <Text style={styles.orderIdText}>Pesanan #{item.id}</Text>
@@ -360,15 +411,33 @@ export default function TenantDashboardScreen({ navigation }) {
                           {new Date(item.waktu_transaksi).toLocaleTimeString([], {
                             hour: '2-digit',
                             minute: '2-digit',
-                          })}
+                          })} WIB
                         </Text>
                       </View>
 
-                      {/* Jam Pengambilan Target (US-05) */}
-                      <View style={styles.targetJamBadge}>
-                        <Ionicons name="time" size={13} color={COLORS.brownDark} />
-                        <Text style={styles.targetJamText}>
-                          Ambil: {item.jam_pengambilan}
+                      {/* Badge Status Pembayaran (Revisi Poin 2) */}
+                      <View
+                        style={[
+                          styles.payStatusBadge,
+                          stBayar === 'Sudah Dibayar'
+                            ? styles.payStatusLunas
+                            : styles.payStatusBelum,
+                        ]}
+                      >
+                        <Ionicons
+                          name={stBayar === 'Sudah Dibayar' ? 'checkmark-circle' : 'time-outline'}
+                          size={12}
+                          color={stBayar === 'Sudah Dibayar' ? COLORS.textSuccessDark : COLORS.urgentOrange}
+                        />
+                        <Text
+                          style={[
+                            styles.payStatusBadgeText,
+                            stBayar === 'Sudah Dibayar'
+                              ? styles.payStatusLunasText
+                              : styles.payStatusBelumText,
+                          ]}
+                        >
+                          {stBayar}
                         </Text>
                       </View>
                     </View>
@@ -382,7 +451,7 @@ export default function TenantDashboardScreen({ navigation }) {
                         </Text>
                       </View>
 
-                      {/* Kontak WhatsApp Mahasiswa */}
+                      {/* Tombol Kontak WhatsApp */}
                       {item.no_hp_mahasiswa && (
                         <TouchableOpacity
                           style={styles.waBtn}
@@ -399,7 +468,7 @@ export default function TenantDashboardScreen({ navigation }) {
                             size={16}
                             color={COLORS.cardBackground}
                           />
-                          <Text style={styles.waBtnText}>Chat WA</Text>
+                          <Text style={styles.waBtnText}>WA</Text>
                         </TouchableOpacity>
                       )}
                     </View>
@@ -424,41 +493,86 @@ export default function TenantDashboardScreen({ navigation }) {
                       )}
                     </View>
 
-                    {/* Baris Total & Status Bayar */}
+                    {/* Baris Total & Status Pesanan */}
                     <View style={styles.paymentStatusRow}>
                       <View>
                         <Text style={styles.payMethodLabel}>
-                          Bayar: {item.metode_pembayaran}
+                          Metode: {item.metode_pembayaran}
                         </Text>
                         <Text style={styles.totalPriceText}>
                           {formatIDR(item.total_harga)}
                         </Text>
                       </View>
 
-                      {/* Badge Status Saat Ini */}
+                      {/* Badge Status Pemesanan Saat Ini */}
                       <View
                         style={[
                           styles.statusBadge,
+                          isMenunggu && styles.statusBadgeMenunggu,
                           isDiproses && styles.statusBadgeDiproses,
                           isSiap && styles.statusBadgeSiap,
                           isSelesai && styles.statusBadgeSelesai,
+                          isDibatalkan && styles.statusBadgeDibatalkan,
                         ]}
                       >
                         <Text
                           style={[
                             styles.statusBadgeText,
+                            isMenunggu && styles.statusTextMenunggu,
                             isDiproses && styles.statusTextDiproses,
                             isSiap && styles.statusTextSiap,
                             isSelesai && styles.statusTextSelesai,
+                            isDibatalkan && styles.statusTextDibatalkan,
                           ]}
                         >
-                          {item.status}
+                          {stPesanan}
                         </Text>
                       </View>
                     </View>
 
-                    {/* Action Buttons: US-08 Update Status */}
+                    {/* Action Buttons: US-08 Update Status & Kirim Notif (Poin 7) */}
                     <View style={styles.actionRow}>
+                      {/* Tombol Kirim Pesan / Notifikasi Custom */}
+                      {!isSelesai && !isDibatalkan && (
+                        <TouchableOpacity
+                          style={styles.notifDirectBtn}
+                          onPress={() => openNotifModal(item)}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="chatbubble-ellipses" size={14} color={COLORS.cardBackground} />
+                          <Text style={styles.notifDirectBtnText}>Kirim Pesan</Text>
+                        </TouchableOpacity>
+                      )}
+
+                      {isMenunggu && (
+                        <>
+                          <TouchableOpacity
+                            style={styles.processButton}
+                            onPress={() => handleUpdateStatus(item.id, 'Diproses')}
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons name="flame" size={15} color={COLORS.cardBackground} />
+                            <Text style={styles.readyButtonText}>Terima & Masak</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.cancelOrderBtn}
+                            onPress={() =>
+                              Alert.alert('Tolak Pesanan', `Tolak pesanan #${item.id}?`, [
+                                { text: 'Batal', style: 'cancel' },
+                                {
+                                  text: 'Tolak',
+                                  style: 'destructive',
+                                  onPress: () => handleUpdateStatus(item.id, 'Dibatalkan'),
+                                },
+                              ])
+                            }
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons name="close" size={15} color={COLORS.danger} />
+                          </TouchableOpacity>
+                        </>
+                      )}
+
                       {isDiproses && (
                         <TouchableOpacity
                           style={styles.readyButton}
@@ -626,6 +740,72 @@ export default function TenantDashboardScreen({ navigation }) {
                 )}
               </TouchableOpacity>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Kirim Notifikasi Langsung ke Mahasiswa (Poin 7) */}
+      <Modal
+        visible={notifModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setNotifModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="notifications" size={20} color={COLORS.primaryDark} />
+                <Text style={styles.modalTitle}>Kirim Notifikasi Mahasiswa</Text>
+              </View>
+              <TouchableOpacity onPress={() => setNotifModalVisible(false)}>
+                <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ marginBottom: 12, backgroundColor: COLORS.badgeBackground, padding: 10, borderRadius: RADIUS.md }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: COLORS.textPrimary }}>
+                Penerima: {targetOrderForNotif?.nama_mahasiswa}
+              </Text>
+              <Text style={{ fontSize: 12, color: COLORS.textSecondary }}>
+                Pesanan #{targetOrderForNotif?.id} • Stan: {tenantName}
+              </Text>
+            </View>
+
+            <Text style={styles.modalLabel}>Judul Notifikasi</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={notifTitle}
+              onChangeText={setNotifTitle}
+              placeholder="Contoh: Pesanan Segera Disajikan"
+              placeholderTextColor={COLORS.textSecondary}
+            />
+
+            <Text style={styles.modalLabel}>Isi Pesan Notifikasi *</Text>
+            <TextInput
+              style={[styles.modalInput, { height: 90, textAlignVertical: 'top' }]}
+              value={notifMessage}
+              onChangeText={setNotifMessage}
+              placeholder="Tulis pesan untuk mahasiswa pemesan (misal: Pesananmu hampir siap, sambal sudah dipisah ya!)..."
+              placeholderTextColor={COLORS.textSecondary}
+              multiline
+              numberOfLines={4}
+            />
+
+            <TouchableOpacity
+              style={[styles.saveMenuBtn, { backgroundColor: COLORS.primary }]}
+              onPress={handleSendCustomNotification}
+              disabled={sendingNotif}
+            >
+              {sendingNotif ? (
+                <ActivityIndicator color={COLORS.cardBackground} />
+              ) : (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons name="send" size={16} color={COLORS.cardBackground} />
+                  <Text style={styles.saveMenuBtnText}>Kirim Notifikasi Sekarang</Text>
+                </View>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -887,6 +1067,33 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: RADIUS.full,
   },
+  payStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.full,
+    gap: 4,
+  },
+  payStatusLunas: {
+    backgroundColor: COLORS.badgeSuccess,
+  },
+  payStatusBelum: {
+    backgroundColor: COLORS.statusWaitingBg,
+  },
+  payStatusBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  payStatusLunasText: {
+    color: COLORS.textSuccessDark,
+  },
+  payStatusBelumText: {
+    color: COLORS.urgentOrange,
+  },
+  statusBadgeMenunggu: {
+    backgroundColor: COLORS.badgeBackground,
+  },
   statusBadgeDiproses: {
     backgroundColor: COLORS.statusWaitingBg,
   },
@@ -896,9 +1103,15 @@ const styles = StyleSheet.create({
   statusBadgeSelesai: {
     backgroundColor: COLORS.infoLightBlue,
   },
+  statusBadgeDibatalkan: {
+    backgroundColor: COLORS.dangerBg,
+  },
   statusBadgeText: {
     fontSize: 11,
     fontWeight: '800',
+  },
+  statusTextMenunggu: {
+    color: COLORS.textBody,
   },
   statusTextDiproses: {
     color: COLORS.queueOrange,
@@ -909,10 +1122,52 @@ const styles = StyleSheet.create({
   statusTextSelesai: {
     color: COLORS.infoDarkBlue,
   },
+  statusTextDibatalkan: {
+    color: COLORS.danger,
+  },
   actionRow: {
     marginTop: SPACING.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  notifDirectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.goldenBrown,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: RADIUS.md,
+    gap: 4,
+  },
+  notifDirectBtnText: {
+    color: COLORS.cardBackground,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  processButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.orange,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: RADIUS.md,
+    gap: 6,
+    ...SHADOWS.soft,
+  },
+  cancelOrderBtn: {
+    backgroundColor: COLORS.dangerBg,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   readyButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -928,6 +1183,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   finishButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

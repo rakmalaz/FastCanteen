@@ -27,7 +27,7 @@ export default function LoginScreen({ navigation }) {
   const [currentBaseUrl, setCurrentBaseUrl] = useState(API_BASE_URL);
   const [modalIpVisible, setModalIpVisible] = useState(false);
   const [inputIp, setInputIp] = useState(
-    API_BASE_URL.replace(/^https?:\/\//, '').replace(/\/api\/?$/, '').split(':')[0] || '192.168.18.111'
+    API_BASE_URL.replace(/^https?:\/\//, '').replace(/\/api\/?$/, '').split(':')[0] || '192.168.1.252'
   );
 
   const handleLogin = async () => {
@@ -67,28 +67,6 @@ export default function LoginScreen({ navigation }) {
     setCurrentBaseUrl(updatedUrl);
     setModalIpVisible(false);
     Alert.alert('Berhasil', `Alamat backend diperbarui ke:\n${updatedUrl}`);
-  };
-
-  const handleQuickDemo = (type) => {
-    if (type === 'admin_elka') {
-      setEmail('elka@uinsa.ac.id');
-      setPassword('123456');
-    } else if (type === 'admin_rayhan') {
-      setEmail('rayhan@uinsa.ac.id');
-      setPassword('123456');
-    } else if (type === 'admin_putra') {
-      setEmail('putra@uinsa.ac.id');
-      setPassword('123456');
-    } else if (type === 'admin_rizki') {
-      setEmail('rizki@uinsa.ac.id');
-      setPassword('123456');
-    } else if (type === 'mahasiswa') {
-      setEmail('mahasiswa@uinsa.ac.id');
-      setPassword('123456');
-    } else if (type === 'tenant') {
-      setEmail('siti@fastcanteen.com');
-      setPassword('123456');
-    }
   };
 
   return (
@@ -136,72 +114,8 @@ export default function LoginScreen({ navigation }) {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Masuk ke Akun</Text>
           <Text style={styles.cardSubtitle}>
-            Tiga Hak Akses: Super Admin, Mahasiswa, atau Stan Tenant Kantin.
+            Silakan masukkan email kampus atau NIM serta kata sandi Anda.
           </Text>
-
-          {/* Quick Demo Selector */}
-          <Text style={styles.quickLabel}>Pilih Akun Demo Cepat (3 Tampilan):</Text>
-
-          {/* Pilihan Super Admin (4 Orang) */}
-          <View style={styles.demoSectionBox}>
-            <View style={styles.demoSectionHeader}>
-              <Ionicons name="shield-checkmark" size={14} color={COLORS.orange} />
-              <Text style={styles.demoSectionTitle}>4 Super Admin Resmi UINSA:</Text>
-            </View>
-            <View style={styles.adminDemoRow}>
-              <TouchableOpacity
-                style={styles.adminMiniBtn}
-                onPress={() => handleQuickDemo('admin_rayhan')}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.adminMiniText}>1. Rayhan</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.adminMiniBtn}
-                onPress={() => handleQuickDemo('admin_putra')}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.adminMiniText}>2. Putra</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.adminMiniBtn}
-                onPress={() => handleQuickDemo('admin_elka')}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.adminMiniText}>3. Elka</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.adminMiniBtn}
-                onPress={() => handleQuickDemo('admin_rizki')}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.adminMiniText}>4. Rizki</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Mahasiswa & Tenant Demo */}
-          <View style={styles.quickRow}>
-            <TouchableOpacity
-              style={styles.quickButton}
-              onPress={() => handleQuickDemo('mahasiswa')}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="school-outline" size={16} color={COLORS.primaryDark} />
-              <Text style={styles.quickButtonText}>Mahasiswa (Demo)</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.quickButton}
-              onPress={() => handleQuickDemo('tenant')}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="storefront-outline" size={16} color={COLORS.goldenBrown} />
-              <Text style={[styles.quickButtonText, { color: COLORS.goldenBrown }]}>
-                Tenant (Bu Siti)
-              </Text>
-            </TouchableOpacity>
-          </View>
 
           {/* Input Email / NIM */}
           <View style={styles.inputGroup}>
@@ -319,7 +233,7 @@ export default function LoginScreen({ navigation }) {
                 />
                 <TextInput
                   style={styles.input}
-                  placeholder="Contoh: 192.168.18.111"
+                  placeholder="Contoh: 192.168.1.252"
                   placeholderTextColor={COLORS.textSecondary}
                   value={inputIp}
                   onChangeText={setInputIp}
@@ -331,9 +245,9 @@ export default function LoginScreen({ navigation }) {
             <View style={styles.ipPresetRow}>
               <TouchableOpacity
                 style={styles.ipPresetBtn}
-                onPress={() => setInputIp('192.168.18.111')}
+                onPress={() => setInputIp('192.168.1.252')}
               >
-                <Text style={styles.ipPresetText}>IP Sekarang (192.168.18.111)</Text>
+                <Text style={styles.ipPresetText}>IP Sekarang (192.168.1.252)</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.ipPresetBtn}
@@ -466,72 +380,6 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: 4,
     marginBottom: SPACING.lg,
-  },
-  quickLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.textBody,
-    marginBottom: SPACING.xs,
-  },
-  demoSectionBox: {
-    backgroundColor: '#FFF8E1',
-    borderRadius: RADIUS.md,
-    padding: SPACING.sm,
-    marginBottom: SPACING.sm,
-    borderWidth: 1,
-    borderColor: '#FFE082',
-  },
-  demoSectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-    gap: 4,
-  },
-  demoSectionTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.brownDark,
-  },
-  adminDemoRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  adminMiniBtn: {
-    backgroundColor: COLORS.cardBackground,
-    paddingVertical: 5,
-    paddingHorizontal: 8,
-    borderRadius: RADIUS.sm,
-    borderWidth: 1,
-    borderColor: '#FFD54F',
-  },
-  adminMiniText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.brownDark,
-  },
-  quickRow: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-    marginBottom: SPACING.lg,
-  },
-  quickButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.inputBackground,
-    paddingVertical: 9,
-    paddingHorizontal: SPACING.sm,
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.inactiveTab,
-    gap: 6,
-  },
-  quickButtonText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.primaryDark,
   },
   inputGroup: {
     marginBottom: SPACING.lg,

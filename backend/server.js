@@ -10,6 +10,7 @@ const tenantRoutes = require('./routes/tenantRoutes');
 const menuRoutes = require('./routes/menuRoutes');
 const pesananRoutes = require('./routes/pesananRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const notifikasiRoutes = require('./routes/notifikasiRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -30,7 +31,7 @@ app.get('/', (req, res) => {
     res.json({
         message: 'FastCanteen API Server - UINSA Kampus 2',
         status: 'Online',
-        version: '1.0.0'
+        version: '2.0.0'
     });
 });
 
@@ -48,6 +49,7 @@ app.use('/api/tenant', tenantRoutes);
 app.use('/api/menu', menuRoutes);
 app.use('/api/pesanan', pesananRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/notifikasi', notifikasiRoutes);
 
 // Penanganan Route 404
 app.use((req, res) => {
@@ -71,6 +73,6 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`=======================================================`);
     console.log(`🚀 FastCanteen Server berjalan di http://localhost:${PORT}`);
     console.log(`📱 Untuk Emulator Android: http://10.0.2.2:${PORT}/api`);
-    console.log(`📡 Rute API: /api/auth, /api/tenant, /api/menu, /api/pesanan`);
+    console.log(`📡 Rute API: /api/auth, /api/tenant, /api/menu, /api/pesanan, /api/admin, /api/notifikasi`);
     console.log(`=======================================================`);
 });

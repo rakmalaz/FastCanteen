@@ -2,10 +2,11 @@ const db = require('./config/db');
 
 async function seed() {
     try {
-        console.log('🌱 Memulai proses seeding data FastCanteen...');
+        console.log('🌱 Memulai proses seeding data FastCanteen v2...');
 
         // 1. Bersihkan data lama jika diinginkan
         await db.query('SET FOREIGN_KEY_CHECKS = 0');
+        await db.query('TRUNCATE TABLE notifikasi');
         await db.query('TRUNCATE TABLE detail_pesanan');
         await db.query('TRUNCATE TABLE pesanan');
         await db.query('TRUNCATE TABLE menu');
@@ -16,18 +17,15 @@ async function seed() {
         console.log('🧹 Tabel berhasil dibersihkan');
 
         // 2. Tambahkan Pengguna
-        // 4 Super Admin Resmi FastCanteen UINSA
         const users = [
-            ['Rayhan Akmal Azhari', '09020625073', 'rayhan@uinsa.ac.id', '123456', 'admin', '081234567891'],
-            ['Putra Mahardhika Surasa', '09040625094', 'putra@uinsa.ac.id', '123456', 'admin', '081234567892'],
-            ['Elka Putra Prasetiyo', '09010625007', 'elka@uinsa.ac.id', '123456', 'admin', '081234567890'],
-            ['Rizki Ridhwan Arif S.', '09030625107', 'rizki@uinsa.ac.id', '123456', 'admin', '081234567893'],
-            // Mahasiswa untuk pemesanan & demo pre-order
-            ['Ahmad Mahasiswa Demo', '09010625088', 'mahasiswa@uinsa.ac.id', '123456', 'mahasiswa', '081211112222'],
-            ['Siti Aisyah Mahasiswi', '09020625055', 'aisyah@uinsa.ac.id', '123456', 'mahasiswa', '081233334444'],
-            // Pengelola Stan Tenant Kantin
+            ['Elka Putra Prasetiyo', '09010625007', 'elka@uinsa.ac.id', '123456', 'mahasiswa', '081234567890'],
+            ['Rayhan Akmal Azhari', '09020625073', 'rayhan@uinsa.ac.id', '123456', 'mahasiswa', '081234567891'],
             ['Bu Siti Fatimah', null, 'siti@fastcanteen.com', '123456', 'tenant', '081298765432'],
             ['Cak Slamet', null, 'slamet@fastcanteen.com', '123456', 'tenant', '081298765433'],
+            ['Super Admin Kantin', null, 'admin@fastcanteen.com', '123456', 'admin', '081299998888'],
+            ['Putra Mahardhika Surasa', '09040625094', 'putra@uinsa.ac.id', '123456', 'admin', '081234567892'],
+            ['Rizki Ridhwan Arif S.', '09030625107', 'rizki@uinsa.ac.id', '123456', 'admin', '081234567893'],
+            ['Ahmad Mahasiswa Demo', '09010625088', 'mahasiswa@uinsa.ac.id', '123456', 'mahasiswa', '081211112222'],
             ['Pak Joko Barokah', null, 'barokah@fastcanteen.com', '123456', 'tenant', '081298765434']
         ];
 
@@ -37,7 +35,7 @@ async function seed() {
                 u
             );
         }
-        console.log('👤 Akun 4 Super Admin, Mahasiswa, dan Tenant berhasil dibuat');
+        console.log('👤 Akun Pengguna (Mahasiswa, Tenant, Super Admin) berhasil dibuat');
 
         // Ambil ID pengguna
         const [userRows] = await db.query('SELECT id, email FROM pengguna');
@@ -60,9 +58,6 @@ async function seed() {
         console.log('🏪 Data Tenant Stan Kantin berhasil dibuat');
 
         const [tenantRows] = await db.query('SELECT id, nama_tenant FROM tenant');
-        const tenantMap = {};
-        tenantRows.forEach(t => { tenantMap[t.nama_tenant] = t.id; });
-
         const t1 = tenantRows[0].id; // Mbak Siti
         const t2 = tenantRows[1].id; // Cak Slamet
         const t3 = tenantRows[2].id; // Kedai Barokah
@@ -96,16 +91,17 @@ async function seed() {
         }
         console.log('🍛 Daftar Menu berhasil dibuat');
 
-        // 5. Tambahkan Contoh Pesanan Aktif untuk Mahasiswa Elka
+        // 5. Tambahkan Contoh Pesanan Aktif (tanpa jam_pengambilan, dengan status_pembayaran & status_pesanan)
         const [menuList] = await db.query('SELECT id, harga FROM menu LIMIT 2');
         const m1 = menuList[0];
         const m2 = menuList[1];
+        const totalHarga = parseFloat(m1.harga) + parseFloat(m2.harga);
 
         const [orderResult] = await db.query(
             `INSERT INTO pesanan 
-             (id_mahasiswa, id_tenant, jam_pengambilan, total_harga, metode_pembayaran, status, bukti_pembayaran, catatan)
-             VALUES (?, ?, '11:45 WIB', ?, 'QRIS', 'Diproses', 'https://via.placeholder.com/300?text=Bukti+QRIS+Lunas', 'Pedas sedang, koya dipisah')`,
-            [userMap['mahasiswa@uinsa.ac.id'], t1, (m1.harga * 1) + (m2.harga * 1)]
+             (id_mahasiswa, id_tenant, total_harga, metode_pembayaran, status_pembayaran, status_pesanan, bukti_pembayaran, catatan)
+             VALUES (?, ?, ?, 'QRIS', 'Sudah Dibayar', 'Diproses', 'https://via.placeholder.com/300?text=Bukti+QRIS+Lunas', 'Pedas sedang, koya dipisah')`,
+            [userMap['elka@uinsa.ac.id'] || 1, t1, totalHarga]
         );
 
         const orderId = orderResult.insertId;
@@ -118,8 +114,15 @@ async function seed() {
             [orderId, m2.id, 1, m2.harga]
         );
 
-        console.log('📦 Contoh pesanan aktif berhasil dibuat');
-        console.log('✅ SEEDING DATA FASTCANTEEN SELESAI DENGAN SUKSES!');
+        // 6. Tambahkan Contoh Notifikasi
+        await db.query(
+            `INSERT INTO notifikasi (id_penerima, id_pengirim, id_pesanan, judul, pesan, tipe, is_read)
+             VALUES (?, ?, ?, 'Pesanan Sedang Dimasak 👨‍🍳', 'Pesanan #${orderId} Anda sedang dimasak oleh Kantin Mbak Siti. Mohon ditunggu!', 'status_diproses', 0)`,
+            [userMap['elka@uinsa.ac.id'] || 1, userMap['siti@fastcanteen.com'] || 3, orderId]
+        );
+
+        console.log('📦 Contoh pesanan aktif & notifikasi berhasil dibuat');
+        console.log('✅ SEEDING DATA FASTCANTEEN V2 SELESAI DENGAN SUKSES!');
         process.exit(0);
     } catch (err) {
         console.error('❌ Gagal melakukan seeding:', err);

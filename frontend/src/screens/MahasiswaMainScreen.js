@@ -59,7 +59,7 @@ export default function MahasiswaMainScreen({ navigation, route }) {
   const [selectedTenantId, setSelectedTenantId] = useState(null);
 
   // ==========================================
-  // DATA STATES: PESANAN & RIWAYAT
+  // DATA STATES: PESANAN & RIWAYAT (US-11)
   // ==========================================
   const [orders, setOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
@@ -67,15 +67,70 @@ export default function MahasiswaMainScreen({ navigation, route }) {
   const [riwayatFilter, setRiwayatFilter] = useState('Semua'); // 'Semua' | 'Selesai' | 'Dibatalkan'
 
   // ==========================================
+  // DATA STATES: NOTIFIKASI IN-APP (Poin 7)
+  // ==========================================
+  const [notifications, setNotifications] = useState([]);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [modalNotifVisible, setModalNotifVisible] = useState(false);
+  const [activeToastNotif, setActiveToastNotif] = useState(null);
+  const [lastNotifId, setLastNotifId] = useState(null);
+
+  // ==========================================
   // DATA STATES: PROFIL & MODAL IP
   // ==========================================
   const [modalIpVisible, setModalIpVisible] = useState(false);
   const [currentBaseUrl, setCurrentBaseUrl] = useState(API_BASE_URL);
   const [inputIp, setInputIp] = useState(
-    API_BASE_URL.replace(/^https?:\/\//, '').replace(/\/api\/?$/, '').split(':')[0] || '192.168.18.111'
+    API_BASE_URL.replace(/^https?:\/\//, '').replace(/\/api\/?$/, '').split(':')[0] || '192.168.1.252'
   );
   const [pingTesting, setPingTesting] = useState(false);
   const [pingStatus, setPingStatus] = useState(null);
+
+  // ------------------------------------------
+  // FETCH NOTIFIKASI
+  // ------------------------------------------
+  const fetchNotifications = async () => {
+    if (!user || !user.id) return;
+    try {
+      const res = await API.get(`/notifikasi/user/${user.id}`);
+      if (res.data.success) {
+        setNotifications(res.data.data);
+        setUnreadNotifCount(res.data.unread_count || 0);
+
+        if (res.data.data.length > 0) {
+          const newest = res.data.data[0];
+          if (!newest.is_read && newest.id !== lastNotifId) {
+            setLastNotifId(newest.id);
+            setActiveToastNotif(newest);
+            setTimeout(() => {
+              setActiveToastNotif(null);
+            }, 6000);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Gagal memuat notifikasi FastCanteen:', err.message);
+    }
+  };
+
+  const handleMarkAsRead = async (notifId) => {
+    try {
+      await API.put(`/notifikasi/${notifId}/baca`);
+      fetchNotifications();
+    } catch (err) {
+      console.warn('Gagal menandai notifikasi dibaca:', err.message);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    if (!user?.id) return;
+    try {
+      await API.put(`/notifikasi/user/${user.id}/baca-semua`);
+      fetchNotifications();
+    } catch (err) {
+      console.warn('Gagal menandai semua dibaca:', err.message);
+    }
+  };
 
   // ------------------------------------------
   // FETCH MENU & TENANT (BERANDA)
@@ -123,8 +178,16 @@ export default function MahasiswaMainScreen({ navigation, route }) {
     fetchMenuData();
     if (user?.id) {
       fetchOrders();
+      fetchNotifications();
+
+      // Realtime in-app polling (Poin 7)
+      const interval = setInterval(() => {
+        fetchOrders();
+        fetchNotifications();
+      }, 8000);
+      return () => clearInterval(interval);
     }
-  }, [user]);
+  }, [user?.id, lastNotifId]);
 
   // Refresh handlers
   const onRefreshMenu = useCallback(() => {
@@ -135,23 +198,26 @@ export default function MahasiswaMainScreen({ navigation, route }) {
   const onRefreshOrders = useCallback(() => {
     setRefreshingOrders(true);
     fetchOrders();
+    fetchNotifications();
   }, [user]);
 
-  // Pesanan Aktif vs Riwayat
-  const activeOrders = orders.filter(
-    (o) => o.status === 'Diproses' || o.status === 'Siap Diambil'
-  );
+  // Pesanan Aktif vs Riwayat (US-11 & Skema V2)
+  const activeOrders = orders.filter((o) => {
+    const st = o.status_pesanan || o.status;
+    return st === 'Menunggu' || st === 'Diproses' || st === 'Siap Diambil';
+  });
 
   const historyOrders = orders.filter((o) => {
-    if (o.status !== 'Selesai' && o.status !== 'Dibatalkan') return false;
-    if (riwayatFilter === 'Selesai') return o.status === 'Selesai';
-    if (riwayatFilter === 'Dibatalkan') return o.status === 'Dibatalkan';
+    const st = o.status_pesanan || o.status;
+    if (st !== 'Selesai' && st !== 'Dibatalkan') return false;
+    if (riwayatFilter === 'Selesai') return st === 'Selesai';
+    if (riwayatFilter === 'Dibatalkan') return st === 'Dibatalkan';
     return true;
   });
 
-  const completedOrdersCount = orders.filter((o) => o.status === 'Selesai').length;
+  const completedOrdersCount = orders.filter((o) => (o.status_pesanan || o.status) === 'Selesai').length;
   const totalExpenditure = orders
-    .filter((o) => o.status === 'Selesai')
+    .filter((o) => (o.status_pesanan || o.status) === 'Selesai')
     .reduce((sum, o) => sum + Number(o.total_harga || 0), 0);
 
   // Helper format rupiah
@@ -233,96 +299,87 @@ export default function MahasiswaMainScreen({ navigation, route }) {
   });
 
   // ==========================================
-  // RENDER: STEP TRACKER STATUS PESANAN
+  // RENDER: STEP TRACKER STATUS PESANAN (Skema V2)
   // ==========================================
   const renderStatusTracker = (status) => {
+    if (status === 'Dibatalkan') {
+      return (
+        <View style={styles.cancelledBannerBox}>
+          <Ionicons name="close-circle" size={16} color={COLORS.danger} />
+          <Text style={styles.cancelledBannerText}>Pesanan Dibatalkan</Text>
+        </View>
+      );
+    }
+
+    const isMenunggu = status === 'Menunggu';
     const isDiproses = status === 'Diproses';
     const isSiap = status === 'Siap Diambil';
     const isSelesai = status === 'Selesai';
 
+    const step1Active = true; // Menunggu konfirmasi
+    const step2Active = isDiproses || isSiap || isSelesai;
+    const step3Active = isSiap || isSelesai;
+    const step4Active = isSelesai;
+
     return (
       <View style={styles.trackerContainer}>
-        {/* Step 1: Diterima & Dimasak */}
+        {/* Step 1: Menunggu */}
         <View style={styles.trackerStep}>
-          <View
-            style={[
-              styles.stepCircle,
-              (isDiproses || isSiap || isSelesai) && styles.stepCircleActive,
-            ]}
-          >
-            <Ionicons
-              name="flame"
-              size={13}
-              color={
-                isDiproses || isSiap || isSelesai
-                  ? COLORS.cardBackground
-                  : COLORS.textSecondary
-              }
-            />
+          <View style={[styles.stepCircle, step1Active && styles.stepCircleActive]}>
+            <Ionicons name="time" size={11} color={COLORS.cardBackground} />
           </View>
-          <Text
-            style={[
-              styles.stepText,
-              (isDiproses || isSiap || isSelesai) && styles.stepTextActive,
-            ]}
-          >
-            Dimasak
+          <Text style={[styles.stepText, step1Active && styles.stepTextActive]}>
+            Menunggu
           </Text>
         </View>
 
         {/* Garis 1 */}
-        <View
-          style={[
-            styles.trackerLine,
-            (isSiap || isSelesai) && styles.trackerLineActive,
-          ]}
-        />
+        <View style={[styles.trackerLine, step2Active && styles.trackerLineActive]} />
 
-        {/* Step 2: Siap Diambil */}
+        {/* Step 2: Dimasak */}
         <View style={styles.trackerStep}>
-          <View
-            style={[
-              styles.stepCircle,
-              (isSiap || isSelesai) && styles.stepCircleActive,
-            ]}
-          >
+          <View style={[styles.stepCircle, step2Active && styles.stepCircleActive]}>
             <Ionicons
-              name="checkmark"
-              size={14}
-              color={
-                isSiap || isSelesai
-                  ? COLORS.cardBackground
-                  : COLORS.textSecondary
-              }
+              name="flame"
+              size={11}
+              color={step2Active ? COLORS.cardBackground : COLORS.textSecondary}
             />
           </View>
-          <Text
-            style={[
-              styles.stepText,
-              (isSiap || isSelesai) && styles.stepTextActive,
-            ]}
-          >
-            Siap Diambil
+          <Text style={[styles.stepText, step2Active && styles.stepTextActive]}>
+            Dimasak
           </Text>
         </View>
 
         {/* Garis 2 */}
-        <View
-          style={[styles.trackerLine, isSelesai && styles.trackerLineActive]}
-        />
+        <View style={[styles.trackerLine, step3Active && styles.trackerLineActive]} />
 
-        {/* Step 3: Selesai */}
+        {/* Step 3: Siap Diambil */}
         <View style={styles.trackerStep}>
-          <View
-            style={[styles.stepCircle, isSelesai && styles.stepCircleActive]}
-          >
+          <View style={[styles.stepCircle, step3Active && styles.stepCircleActive]}>
             <Ionicons
-              name="happy"
-              size={13}
-              color={isSelesai ? COLORS.cardBackground : COLORS.textSecondary}
+              name="checkmark"
+              size={12}
+              color={step3Active ? COLORS.cardBackground : COLORS.textSecondary}
             />
           </View>
-          <Text style={[styles.stepText, isSelesai && styles.stepTextActive]}>
+          <Text style={[styles.stepText, step3Active && styles.stepTextActive]}>
+            Siap
+          </Text>
+        </View>
+
+        {/* Garis 3 */}
+        <View style={[styles.trackerLine, step4Active && styles.trackerLineActive]} />
+
+        {/* Step 4: Selesai */}
+        <View style={styles.trackerStep}>
+          <View style={[styles.stepCircle, step4Active && styles.stepCircleActive]}>
+            <Ionicons
+              name="happy"
+              size={11}
+              color={step4Active ? COLORS.cardBackground : COLORS.textSecondary}
+            />
+          </View>
+          <Text style={[styles.stepText, step4Active && styles.stepTextActive]}>
             Selesai
           </Text>
         </View>
@@ -372,18 +429,35 @@ export default function MahasiswaMainScreen({ navigation, route }) {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.quickActiveBadgeBtn}
-          onPress={() => setActiveTab('pesanan')}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="receipt-outline" size={18} color={COLORS.primaryDark} />
-          {activeOrders.length > 0 && (
-            <View style={styles.quickOrderBadge}>
-              <Text style={styles.quickOrderBadgeText}>{activeOrders.length}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {/* Tombol Lonceng Notifikasi (Poin 7) */}
+          <TouchableOpacity
+            style={styles.quickActiveBadgeBtn}
+            onPress={() => setModalNotifVisible(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="notifications-outline" size={19} color={COLORS.primaryDark} />
+            {unreadNotifCount > 0 && (
+              <View style={[styles.quickOrderBadge, { backgroundColor: COLORS.danger }]}>
+                <Text style={styles.quickOrderBadgeText}>{unreadNotifCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* Tombol Pesanan Aktif */}
+          <TouchableOpacity
+            style={styles.quickActiveBadgeBtn}
+            onPress={() => setActiveTab('pesanan')}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="receipt-outline" size={18} color={COLORS.primaryDark} />
+            {activeOrders.length > 0 && (
+              <View style={styles.quickOrderBadge}>
+                <Text style={styles.quickOrderBadgeText}>{activeOrders.length}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Hero Banner Pre-Order Kampus */}
@@ -582,7 +656,7 @@ export default function MahasiswaMainScreen({ navigation, route }) {
   );
 
   // ==========================================
-  // VIEW TAB 2: PESANAN AKTIF
+  // VIEW TAB 2: PESANAN AKTIF (US-11 & Skema V2)
   // ==========================================
   const renderPesananView = () => (
     <View style={styles.tabContentContainer}>
@@ -591,16 +665,31 @@ export default function MahasiswaMainScreen({ navigation, route }) {
         <View>
           <Text style={styles.sectionHeaderTitle}>Pesanan Berjalan</Text>
           <Text style={styles.sectionHeaderSubtitle}>
-            Pantau status masak dan waktu pengambilan di stan kantin
+            Pantau status masak dan konfirmasi pesanan di stan kantin
           </Text>
         </View>
-        <TouchableOpacity
-          onPress={onRefreshOrders}
-          style={styles.refreshIconBtn}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="refresh" size={20} color={COLORS.primaryDark} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          {/* Tombol Lonceng Notifikasi */}
+          <TouchableOpacity
+            onPress={() => setModalNotifVisible(true)}
+            style={styles.refreshIconBtn}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="notifications-outline" size={19} color={COLORS.primaryDark} />
+            {unreadNotifCount > 0 && (
+              <View style={[styles.quickOrderBadge, { backgroundColor: COLORS.danger, top: -2, right: -2 }]}>
+                <Text style={styles.quickOrderBadgeText}>{unreadNotifCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={onRefreshOrders}
+            style={styles.refreshIconBtn}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="refresh" size={19} color={COLORS.primaryDark} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loadingOrders ? (
@@ -641,7 +730,9 @@ export default function MahasiswaMainScreen({ navigation, route }) {
             </View>
           }
           renderItem={({ item }) => {
-            const isSiapDiambil = item.status === 'Siap Diambil';
+            const stPesanan = item.status_pesanan || item.status || 'Menunggu';
+            const stBayar = item.status_pembayaran || 'Sudah Dibayar';
+            const isSiapDiambil = stPesanan === 'Siap Diambil';
 
             return (
               <View style={styles.orderCard}>
@@ -676,15 +767,42 @@ export default function MahasiswaMainScreen({ navigation, route }) {
                   </View>
                 </View>
 
-                {/* Target Jam Pengambilan */}
-                <View style={styles.pickupTimeBox}>
-                  <Ionicons name="time" size={14} color={COLORS.goldenBrown} />
-                  <Text style={styles.pickupTimeLabel}>Target Pengambilan:</Text>
-                  <Text style={styles.pickupTimeValue}>{item.jam_pengambilan}</Text>
+                {/* Status Pembayaran & Waktu Transaksi (Revisi Poin 2 & Poin 5) */}
+                <View style={styles.statusMetaRow}>
+                  <View style={styles.metaTimeBadge}>
+                    <Ionicons name="time-outline" size={13} color={COLORS.textSecondary} />
+                    <Text style={styles.metaTimeText}>
+                      {new Date(item.waktu_transaksi).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })} WIB
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.payBadgeMhs,
+                      stBayar === 'Sudah Dibayar' ? styles.payBadgeLunas : styles.payBadgeBelum,
+                    ]}
+                  >
+                    <Ionicons
+                      name={stBayar === 'Sudah Dibayar' ? 'checkmark-circle' : 'hourglass-outline'}
+                      size={12}
+                      color={stBayar === 'Sudah Dibayar' ? COLORS.textSuccessDark : COLORS.urgentOrange}
+                    />
+                    <Text
+                      style={[
+                        styles.payBadgeMhsText,
+                        stBayar === 'Sudah Dibayar' ? styles.payBadgeLunasText : styles.payBadgeBelumText,
+                      ]}
+                    >
+                      {stBayar}
+                    </Text>
+                  </View>
                 </View>
 
                 {/* Step Tracker Visual */}
-                {renderStatusTracker(item.status)}
+                {renderStatusTracker(stPesanan)}
 
                 {/* Rincian Menu */}
                 <View style={styles.itemsSummary}>
@@ -747,13 +865,27 @@ export default function MahasiswaMainScreen({ navigation, route }) {
             Daftar pesanan yang telah selesai dan riwayat belanja Anda
           </Text>
         </View>
-        <TouchableOpacity
-          onPress={onRefreshOrders}
-          style={styles.refreshIconBtn}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="refresh" size={20} color={COLORS.primaryDark} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <TouchableOpacity
+            onPress={() => setModalNotifVisible(true)}
+            style={styles.refreshIconBtn}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="notifications-outline" size={19} color={COLORS.primaryDark} />
+            {unreadNotifCount > 0 && (
+              <View style={[styles.quickOrderBadge, { backgroundColor: COLORS.danger, top: -2, right: -2 }]}>
+                <Text style={styles.quickOrderBadgeText}>{unreadNotifCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={onRefreshOrders}
+            style={styles.refreshIconBtn}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="refresh" size={19} color={COLORS.primaryDark} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Filter Filter Chip: Semua | Selesai | Dibatalkan */}
@@ -820,7 +952,9 @@ export default function MahasiswaMainScreen({ navigation, route }) {
             </View>
           }
           renderItem={({ item }) => {
-            const isSelesai = item.status === 'Selesai';
+            const stPesanan = item.status_pesanan || item.status || 'Selesai';
+            const stBayar = item.status_pembayaran || 'Sudah Dibayar';
+            const isSelesai = stPesanan === 'Selesai';
 
             return (
               <View style={styles.orderCard}>
@@ -835,29 +969,51 @@ export default function MahasiswaMainScreen({ navigation, route }) {
                             year: 'numeric',
                             hour: '2-digit',
                             minute: '2-digit',
-                          })
+                          }) + ' WIB'
                         : 'Waktu Transaksi'}
                     </Text>
                   </View>
 
-                  <View
-                    style={[
-                      styles.statusPillBadge,
-                      isSelesai
-                        ? { backgroundColor: COLORS.badgeSuccess }
-                        : { backgroundColor: COLORS.dangerBg },
-                    ]}
-                  >
-                    <Text
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <View
                       style={[
-                        styles.statusPillText,
-                        isSelesai
-                          ? { color: COLORS.textSuccessDark }
-                          : { color: COLORS.dangerDark },
+                        styles.statusPillBadge,
+                        stBayar === 'Sudah Dibayar'
+                          ? { backgroundColor: COLORS.badgeSuccess }
+                          : { backgroundColor: COLORS.statusWaitingBg },
                       ]}
                     >
-                      {item.status}
-                    </Text>
+                      <Text
+                        style={[
+                          styles.statusPillText,
+                          stBayar === 'Sudah Dibayar'
+                            ? { color: COLORS.textSuccessDark }
+                            : { color: COLORS.urgentOrange },
+                        ]}
+                      >
+                        {stBayar}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.statusPillBadge,
+                        isSelesai
+                          ? { backgroundColor: COLORS.infoLightBlue }
+                          : { backgroundColor: COLORS.dangerBg },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.statusPillText,
+                          isSelesai
+                            ? { color: COLORS.infoDarkBlue }
+                            : { color: COLORS.dangerDark },
+                        ]}
+                      >
+                        {stPesanan}
+                      </Text>
+                    </View>
                   </View>
                 </View>
 
@@ -990,6 +1146,53 @@ export default function MahasiswaMainScreen({ navigation, route }) {
             <View style={styles.infoTextCol}>
               <Text style={styles.infoLabel}>Nomor WhatsApp</Text>
               <Text style={styles.infoValue}>{user?.no_hp || '-'}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* TABEL DATA USER (Revisi Poin 3) */}
+        <View style={styles.userTableSection}>
+          <View style={styles.tableCardHeader}>
+            <Ionicons name="server" size={16} color={COLORS.primaryDark} />
+            <Text style={styles.tableCardTitle}>Tabel User (Entitas `pengguna`)</Text>
+          </View>
+
+          <View style={styles.tableContainer}>
+            <View style={styles.tableHeaderRow}>
+              <Text style={[styles.tableColHeader, { flex: 1.2 }]}>Kolom</Text>
+              <Text style={[styles.tableColHeader, { flex: 2 }]}>Data Akun</Text>
+            </View>
+
+            <View style={styles.tableDataRow}>
+              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>id (PK)</Text>
+              <Text style={[styles.tableValText, { flex: 2, fontWeight: '700' }]}>#{user?.id || '1'}</Text>
+            </View>
+
+            <View style={[styles.tableDataRow, styles.tableDataRowAlt]}>
+              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>nama</Text>
+              <Text style={[styles.tableValText, { flex: 2 }]}>{user?.nama || '-'}</Text>
+            </View>
+
+            <View style={styles.tableDataRow}>
+              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>nim</Text>
+              <Text style={[styles.tableValText, { flex: 2 }]}>{user?.nim || '-'}</Text>
+            </View>
+
+            <View style={[styles.tableDataRow, styles.tableDataRowAlt]}>
+              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>email</Text>
+              <Text style={[styles.tableValText, { flex: 2 }]}>{user?.email || '-'}</Text>
+            </View>
+
+            <View style={styles.tableDataRow}>
+              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>no_hp</Text>
+              <Text style={[styles.tableValText, { flex: 2 }]}>{user?.no_hp || '-'}</Text>
+            </View>
+
+            <View style={[styles.tableDataRow, styles.tableDataRowAlt]}>
+              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>peran</Text>
+              <View style={styles.roleTableBadge}>
+                <Text style={styles.roleTableBadgeText}>{user?.peran || 'mahasiswa'}</Text>
+              </View>
             </View>
           </View>
         </View>
@@ -1231,7 +1434,7 @@ export default function MahasiswaMainScreen({ navigation, route }) {
               <Ionicons name="globe-outline" size={18} color={COLORS.textBody} />
               <TextInput
                 style={styles.modalIpInput}
-                placeholder="Contoh: 192.168.18.111"
+                placeholder="Contoh: 192.168.1.252"
                 placeholderTextColor={COLORS.textSecondary}
                 value={inputIp}
                 onChangeText={setInputIp}
@@ -1243,9 +1446,9 @@ export default function MahasiswaMainScreen({ navigation, route }) {
             <View style={styles.presetRow}>
               <TouchableOpacity
                 style={styles.presetChip}
-                onPress={() => setInputIp('192.168.18.111')}
+                onPress={() => setInputIp('192.168.1.252')}
               >
-                <Text style={styles.presetChipText}>IP Wi-Fi (192.168.18.111)</Text>
+                <Text style={styles.presetChipText}>IP Wi-Fi (192.168.1.252)</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.presetChip}
@@ -1310,6 +1513,169 @@ export default function MahasiswaMainScreen({ navigation, route }) {
                 <Text style={styles.modalSaveBtnText}>Simpan</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ==========================================
+          TOAST / FLOATING BANNER NOTIFIKASI REALTIME (Poin 7)
+         ========================================== */}
+      {activeToastNotif && (
+        <View style={[styles.floatingToast, { top: (insets?.top || 25) + 8 }]}>
+          <View style={styles.toastLeft}>
+            <View style={styles.toastIconCircle}>
+              <Ionicons name="notifications" size={18} color={COLORS.cardBackground} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.toastTitle}>{activeToastNotif.judul}</Text>
+              <Text style={styles.toastMsg} numberOfLines={2}>
+                {activeToastNotif.pesan}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.toastActionRow}>
+            <TouchableOpacity
+              style={styles.toastOpenBtn}
+              onPress={() => {
+                handleMarkAsRead(activeToastNotif.id);
+                setActiveToastNotif(null);
+                setActiveTab('pesanan');
+              }}
+            >
+              <Text style={styles.toastOpenBtnText}>Lihat</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.toastCloseBtn}
+              onPress={() => setActiveToastNotif(null)}
+            >
+              <Ionicons name="close" size={18} color={COLORS.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* ==========================================
+          MODAL DAFTAR NOTIFIKASI MAHASISWA (Poin 7)
+         ========================================== */}
+      <Modal
+        visible={modalNotifVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setModalNotifVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { maxHeight: '85%', paddingBottom: 16 }]}>
+            <View style={styles.modalHeaderRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="notifications" size={22} color={COLORS.primaryDark} />
+                <Text style={styles.modalTitle}>Notifikasi Pesanan</Text>
+                {unreadNotifCount > 0 && (
+                  <View style={styles.notifBadgeSmall}>
+                    <Text style={styles.notifBadgeSmallText}>{unreadNotifCount} Baru</Text>
+                  </View>
+                )}
+              </View>
+              <TouchableOpacity onPress={() => setModalNotifVisible(false)}>
+                <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {unreadNotifCount > 0 && (
+              <TouchableOpacity
+                style={styles.markAllBtn}
+                onPress={handleMarkAllAsRead}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="checkmark-done" size={14} color={COLORS.primary} />
+                <Text style={styles.markAllBtnText}>Tandai Semua Sudah Dibaca</Text>
+              </TouchableOpacity>
+            )}
+
+            {notifications.length === 0 ? (
+              <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+                <Ionicons name="notifications-off-outline" size={44} color={COLORS.divider} />
+                <Text style={{ marginTop: 8, fontSize: 13, color: COLORS.textSecondary, fontWeight: '600' }}>
+                  Belum ada notifikasi
+                </Text>
+                <Text style={{ fontSize: 12, color: COLORS.textSecondary, textAlign: 'center', marginTop: 4 }}>
+                  Pembaruan status dari stan kantin akan muncul di sini.
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={notifications}
+                keyExtractor={(item) => String(item.id)}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8, paddingVertical: 6 }}
+                renderItem={({ item }) => {
+                  const isUnread = !item.is_read;
+                  return (
+                    <TouchableOpacity
+                      style={[
+                        styles.notifCardItem,
+                        isUnread && styles.notifCardItemUnread,
+                      ]}
+                      onPress={() => {
+                        handleMarkAsRead(item.id);
+                        if (item.id_pesanan) {
+                          setModalNotifVisible(false);
+                          setActiveTab('pesanan');
+                        }
+                      }}
+                      activeOpacity={0.75}
+                    >
+                      <View style={styles.notifCardIconCol}>
+                        <View
+                          style={[
+                            styles.notifItemCircle,
+                            item.tipe === 'siap_diambil'
+                              ? { backgroundColor: COLORS.badgeSuccess }
+                              : item.tipe === 'status_diproses'
+                              ? { backgroundColor: COLORS.statusWaitingBg }
+                              : { backgroundColor: COLORS.badgeBackground },
+                          ]}
+                        >
+                          <Ionicons
+                            name={
+                              item.tipe === 'siap_diambil'
+                                ? 'bag-check'
+                                : item.tipe === 'status_diproses'
+                                ? 'flame'
+                                : 'chatbubble-ellipses'
+                            }
+                            size={16}
+                            color={
+                              item.tipe === 'siap_diambil'
+                                ? COLORS.textSuccessDark
+                                : item.tipe === 'status_diproses'
+                                ? COLORS.queueOrange
+                                : COLORS.primaryDark
+                            }
+                          />
+                        </View>
+                      </View>
+
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Text style={[styles.notifItemTitle, isUnread && { fontWeight: '800', color: COLORS.primaryDark }]}>
+                            {item.judul}
+                          </Text>
+                          {isUnread && <View style={styles.unreadDot} />}
+                        </View>
+                        <Text style={styles.notifItemMsg}>{item.pesan}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                          <Ionicons name="time-outline" size={11} color={COLORS.textSecondary} />
+                          <Text style={styles.notifItemDate}>
+                            {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} •{' '}
+                            {new Date(item.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                          </Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+            )}
           </View>
         </View>
       </Modal>
@@ -2367,5 +2733,269 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: COLORS.cardBackground,
+  },
+  // Revisi Poin 2 & Poin 5: Status Meta Row & Badges
+  statusMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.inputBackground,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 8,
+    borderRadius: RADIUS.md,
+    marginBottom: SPACING.sm,
+  },
+  metaTimeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  metaTimeText: {
+    fontSize: 12,
+    color: COLORS.textBody,
+    fontWeight: '600',
+  },
+  payBadgeMhs: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.full,
+    gap: 4,
+  },
+  payBadgeLunas: {
+    backgroundColor: COLORS.badgeSuccess,
+  },
+  payBadgeBelum: {
+    backgroundColor: COLORS.statusWaitingBg,
+  },
+  payBadgeMhsText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  payBadgeLunasText: {
+    color: COLORS.textSuccessDark,
+  },
+  payBadgeBelumText: {
+    color: COLORS.urgentOrange,
+  },
+  cancelledBannerBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.dangerBg,
+    padding: 10,
+    borderRadius: RADIUS.md,
+    gap: 8,
+    marginVertical: 8,
+  },
+  cancelledBannerText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.danger,
+  },
+  // Revisi Poin 3: Tabel User (pengguna)
+  userTableSection: {
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.md,
+    ...SHADOWS.card,
+  },
+  tableCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: SPACING.sm,
+  },
+  tableCardTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primaryDark,
+  },
+  tableContainer: {
+    borderWidth: 1,
+    borderColor: COLORS.inactiveElement,
+    borderRadius: RADIUS.sm,
+    overflow: 'hidden',
+  },
+  tableHeaderRow: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.badgeBackground,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.inactiveElement,
+  },
+  tableColHeader: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: COLORS.textPrimary,
+    textTransform: 'uppercase',
+  },
+  tableDataRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.inactiveElement,
+  },
+  tableDataRowAlt: {
+    backgroundColor: COLORS.inputBackground,
+  },
+  tableKeyText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  tableValText: {
+    fontSize: 12,
+    color: COLORS.textPrimary,
+  },
+  roleTableBadge: {
+    backgroundColor: COLORS.badgeBackground,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
+  },
+  roleTableBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.goldenBrown,
+    textTransform: 'capitalize',
+  },
+  // Revisi Poin 7: Floating Toast Notifikasi
+  floatingToast: {
+    position: 'absolute',
+    left: SPACING.md,
+    right: SPACING.md,
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: RADIUS.lg,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    ...SHADOWS.floating,
+    zIndex: 9999,
+  },
+  toastLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  toastIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.orange,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toastTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.primaryDark,
+  },
+  toastMsg: {
+    fontSize: 12,
+    color: COLORS.textBody,
+    marginTop: 2,
+  },
+  toastActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 6,
+  },
+  toastOpenBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.sm,
+  },
+  toastOpenBtnText: {
+    color: COLORS.cardBackground,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  toastCloseBtn: {
+    padding: 4,
+  },
+  // Modal Notifikasi Styles
+  notifBadgeSmall: {
+    backgroundColor: COLORS.danger,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
+  },
+  notifBadgeSmallText: {
+    color: COLORS.cardBackground,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  markAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    gap: 4,
+    marginBottom: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  markAllBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  notifCardItem: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.inputBackground,
+    borderRadius: RADIUS.md,
+    padding: 10,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  notifCardItemUnread: {
+    backgroundColor: COLORS.cardBackground,
+    borderColor: COLORS.primary,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.primary,
+  },
+  notifCardIconCol: {
+    justifyContent: 'flex-start',
+  },
+  notifItemCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notifItemTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.danger,
+  },
+  notifItemMsg: {
+    fontSize: 12,
+    color: COLORS.textBody,
+    marginTop: 2,
+  },
+  notifItemDate: {
+    fontSize: 10,
+    color: COLORS.textSecondary,
   },
 });

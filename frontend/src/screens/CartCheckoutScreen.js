@@ -30,17 +30,6 @@ export default function CartCheckoutScreen({ navigation }) {
     totalCount,
   } = useCart();
 
-  // Jam Pengambilan Presets sesuai pola jadwal istirahat UINSA Kampus 2
-  const JAM_PRESETS = [
-    '10:15 WIB (Istirahat Sesi 1)',
-    '11:45 WIB (Istirahat Dhuhur)',
-    '13:00 WIB (Selesai Kuliah)',
-    '15:30 WIB (Istirahat Sore)',
-  ];
-
-  const [selectedJam, setSelectedJam] = useState(JAM_PRESETS[1]);
-  const [customJam, setCustomJam] = useState('');
-  const [useCustomJam, setUseCustomJam] = useState(false);
   const [catatan, setCatatan] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('QRIS'); // 'QRIS' | 'E-Wallet' | 'Tunai'
   const [submitting, setSubmitting] = useState(false);
@@ -49,10 +38,6 @@ export default function CartCheckoutScreen({ navigation }) {
   const formatIDR = (val) => {
     return 'Rp ' + Number(val).toLocaleString('id-ID');
   };
-
-  const effectiveJam = useCustomJam
-    ? customJam.trim() || '12:00 WIB'
-    : selectedJam;
 
   const handleCheckout = async () => {
     if (items.length === 0) {
@@ -72,7 +57,6 @@ export default function CartCheckoutScreen({ navigation }) {
       const orderPayload = {
         id_mahasiswa: user.id,
         id_tenant: activeTenant?.id || items[0].id_tenant,
-        jam_pengambilan: effectiveJam,
         metode_pembayaran: paymentMethod,
         catatan: catatan.trim() || null,
         bukti_pembayaran:
@@ -90,8 +74,8 @@ export default function CartCheckoutScreen({ navigation }) {
       if (res.data.success) {
         clearCart();
         Alert.alert(
-          'Pre-Order Berhasil! 🎉',
-          `Pesanan #${res.data.data.id_pesanan} telah diteruskan ke ${activeTenant?.nama_tenant}. Silakan ambil pada ${effectiveJam}.`,
+          'Pre-Order Berhasil Dibuat! 🎉',
+          `Pesanan #${res.data.data.id_pesanan} telah diteruskan ke stan ${activeTenant?.nama_tenant}. Pesanan Anda segera diproses!`,
           [
             {
               text: 'Lihat Status Pesanan',
@@ -220,88 +204,12 @@ export default function CartCheckoutScreen({ navigation }) {
           ))}
         </View>
 
-        {/* Pemilihan Jam Pengambilan (US-04) */}
-        <Text style={styles.sectionHeader}>⏰ Jam Pengambilan di Kantin</Text>
-        <View style={styles.card}>
-          <Text style={styles.helperText}>
-            Pilih estimasi waktu Anda tiba di stan agar tenant menyiapkan tepat waktu:
-          </Text>
-
-          <View style={styles.jamChipsContainer}>
-            {JAM_PRESETS.map((jam) => {
-              const isSelected = !useCustomJam && selectedJam === jam;
-              return (
-                <TouchableOpacity
-                  key={jam}
-                  style={[
-                    styles.jamChip,
-                    isSelected && styles.jamChipActive,
-                  ]}
-                  onPress={() => {
-                    setSelectedJam(jam);
-                    setUseCustomJam(false);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons
-                    name="time-outline"
-                    size={14}
-                    color={isSelected ? COLORS.cardBackground : COLORS.textBody}
-                  />
-                  <Text
-                    style={[
-                      styles.jamChipText,
-                      isSelected && styles.jamChipTextActive,
-                    ]}
-                  >
-                    {jam}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {/* Opsi Tulis Jam Sendiri */}
-          <TouchableOpacity
-            style={[
-              styles.jamChip,
-              useCustomJam && styles.jamChipActive,
-              { marginTop: SPACING.sm },
-            ]}
-            onPress={() => setUseCustomJam(!useCustomJam)}
-          >
-            <Ionicons
-              name="create-outline"
-              size={14}
-              color={useCustomJam ? COLORS.cardBackground : COLORS.textBody}
-            />
-            <Text
-              style={[
-                styles.jamChipText,
-                useCustomJam && styles.jamChipTextActive,
-              ]}
-            >
-              Tulis Jam Custom Lainnya
-            </Text>
-          </TouchableOpacity>
-
-          {useCustomJam && (
-            <TextInput
-              style={styles.customJamInput}
-              placeholder="Contoh: 12:15 WIB"
-              placeholderTextColor={COLORS.textSecondary}
-              value={customJam}
-              onChangeText={setCustomJam}
-            />
-          )}
-        </View>
-
         {/* Catatan untuk Tenant */}
         <Text style={styles.sectionHeader}>📝 Catatan Tambahan (Opsional)</Text>
         <View style={styles.card}>
           <TextInput
             style={styles.notesInput}
-            placeholder="Contoh: Sambal dipisah, tidak pakai seledri, dll."
+            placeholder="Contoh: Sambal dipisah, tidak pakai seledri, kuah banyak, dll."
             placeholderTextColor={COLORS.textSecondary}
             value={catatan}
             onChangeText={setCatatan}
@@ -601,44 +509,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.textSecondary,
     marginBottom: SPACING.sm,
-  },
-  jamChipsContainer: {
-    gap: 8,
-  },
-  jamChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.badgeBackground,
-    paddingVertical: 9,
-    paddingHorizontal: SPACING.md,
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.inactiveElement,
-    gap: 6,
-  },
-  jamChipActive: {
-    backgroundColor: COLORS.primaryDark,
-    borderColor: COLORS.primaryDark,
-  },
-  jamChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.textBody,
-  },
-  jamChipTextActive: {
-    color: COLORS.cardBackground,
-    fontWeight: '700',
-  },
-  customJamInput: {
-    backgroundColor: COLORS.inputBackground,
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.inactiveTab,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: 8,
-    fontSize: 13,
-    marginTop: SPACING.sm,
-    color: COLORS.textPrimary,
   },
   notesInput: {
     backgroundColor: COLORS.inputBackground,

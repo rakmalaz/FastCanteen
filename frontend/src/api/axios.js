@@ -2,8 +2,8 @@ import axios from 'axios';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
-// IP Wi-Fi aktual laptop di jaringan lokal UINSA/Rumah
-const ACTIVE_WIFI_IP = '192.168.18.111';
+// IP Wi-Fi aktual laptop di jaringan lokal (Wi-Fi)
+const ACTIVE_WIFI_IP = '192.168.1.252';
 
 const getBaseURL = () => {
   if (Platform.OS === 'web') {

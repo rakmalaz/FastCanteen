@@ -229,7 +229,7 @@ export default function SuperAdminDashboardScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Quick View Role Switcher (untuk pengujian tampilan dosen & demo) */}
+        {/* Quick View Role Switcher (Navigasi Peran untuk Super Admin) */}
         <View style={styles.rolePreviewContainer}>
           <Text style={styles.rolePreviewLabel}>Pratinjau Tampilan Lain:</Text>
           <View style={styles.rolePreviewRow}>
@@ -484,7 +484,7 @@ export default function SuperAdminDashboardScreen({ navigation }) {
                         <Text style={styles.recentOrderId}>#{ord.id} · {ord.nama_mahasiswa}</Text>
                         <Text style={styles.recentOrderTenant}>{ord.nama_tenant}</Text>
                         <Text style={styles.recentOrderTime}>
-                          Ambil jam: {ord.jam_pengambilan} ({ord.metode_pembayaran})
+                          Metode: {ord.metode_pembayaran} • {ord.status_pembayaran || 'Sudah Dibayar'}
                         </Text>
                       </View>
                       <View style={styles.recentOrderRight}>
@@ -704,7 +704,7 @@ export default function SuperAdminDashboardScreen({ navigation }) {
                     <View style={styles.orderFooterRow}>
                       <View>
                         <Text style={styles.orderPickupText}>
-                          Ambil: {ord.jam_pengambilan} ({ord.metode_pembayaran})
+                          Bayar: {ord.metode_pembayaran} • {ord.status_pembayaran || 'Sudah Dibayar'}
                         </Text>
                         {ord.catatan ? (
                           <Text style={styles.orderNoteText}>Catatan: "{ord.catatan}"</Text>

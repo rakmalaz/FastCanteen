@@ -49,95 +49,81 @@ export default function OrderHistoryScreen({ navigation }) {
   };
 
   const renderStatusTracker = (status) => {
+    if (status === 'Dibatalkan') {
+      return (
+        <View style={styles.cancelledBannerBox}>
+          <Ionicons name="close-circle" size={16} color={COLORS.danger} />
+          <Text style={styles.cancelledBannerText}>Pesanan Dibatalkan</Text>
+        </View>
+      );
+    }
+
+    const isMenunggu = status === 'Menunggu';
     const isDiproses = status === 'Diproses';
     const isSiap = status === 'Siap Diambil';
     const isSelesai = status === 'Selesai';
 
+    const step1Active = true;
+    const step2Active = isDiproses || isSiap || isSelesai;
+    const step3Active = isSiap || isSelesai;
+    const step4Active = isSelesai;
+
     return (
       <View style={styles.trackerContainer}>
-        {/* Step 1: Sedang Dimasak */}
+        {/* Step 1: Menunggu */}
         <View style={styles.trackerStep}>
-          <View
-            style={[
-              styles.stepCircle,
-              (isDiproses || isSiap || isSelesai) && styles.stepCircleActive,
-            ]}
-          >
+          <View style={[styles.stepCircle, step1Active && styles.stepCircleActive]}>
+            <Ionicons name="time" size={11} color={COLORS.cardBackground} />
+          </View>
+          <Text style={[styles.stepText, step1Active && styles.stepTextActive]}>
+            Menunggu
+          </Text>
+        </View>
+
+        <View style={[styles.trackerLine, step2Active && styles.trackerLineActive]} />
+
+        {/* Step 2: Dimasak */}
+        <View style={styles.trackerStep}>
+          <View style={[styles.stepCircle, step2Active && styles.stepCircleActive]}>
             <Ionicons
               name="flame"
-              size={13}
-              color={
-                isDiproses || isSiap || isSelesai
-                  ? COLORS.cardBackground
-                  : COLORS.textSecondary
-              }
+              size={11}
+              color={step2Active ? COLORS.cardBackground : COLORS.textSecondary}
             />
           </View>
-          <Text
-            style={[
-              styles.stepText,
-              (isDiproses || isSiap || isSelesai) && styles.stepTextActive,
-            ]}
-          >
+          <Text style={[styles.stepText, step2Active && styles.stepTextActive]}>
             Dimasak
           </Text>
         </View>
 
-        {/* Line 1 */}
-        <View
-          style={[
-            styles.trackerLine,
-            (isSiap || isSelesai) && styles.trackerLineActive,
-          ]}
-        />
+        <View style={[styles.trackerLine, step3Active && styles.trackerLineActive]} />
 
-        {/* Step 2: Siap Diambil */}
+        {/* Step 3: Siap */}
         <View style={styles.trackerStep}>
-          <View
-            style={[
-              styles.stepCircle,
-              (isSiap || isSelesai) && styles.stepCircleActive,
-            ]}
-          >
+          <View style={[styles.stepCircle, step3Active && styles.stepCircleActive]}>
             <Ionicons
               name="checkmark"
-              size={14}
-              color={
-                isSiap || isSelesai
-                  ? COLORS.cardBackground
-                  : COLORS.textSecondary
-              }
+              size={12}
+              color={step3Active ? COLORS.cardBackground : COLORS.textSecondary}
             />
           </View>
-          <Text
-            style={[
-              styles.stepText,
-              (isSiap || isSelesai) && styles.stepTextActive,
-            ]}
-          >
-            Siap Diambil
+          <Text style={[styles.stepText, step3Active && styles.stepTextActive]}>
+            Siap
           </Text>
         </View>
 
-        {/* Line 2 */}
-        <View
-          style={[styles.trackerLine, isSelesai && styles.trackerLineActive]}
-        />
+        <View style={[styles.trackerLine, step4Active && styles.trackerLineActive]} />
 
-        {/* Step 3: Selesai */}
+        {/* Step 4: Selesai */}
         <View style={styles.trackerStep}>
-          <View
-            style={[styles.stepCircle, isSelesai && styles.stepCircleActive]}
-          >
+          <View style={[styles.stepCircle, step4Active && styles.stepCircleActive]}>
             <Ionicons
               name="happy"
-              size={13}
-              color={
-                isSelesai ? COLORS.cardBackground : COLORS.textSecondary
-              }
+              size={11}
+              color={step4Active ? COLORS.cardBackground : COLORS.textSecondary}
             />
           </View>
-          <Text style={[styles.stepText, isSelesai && styles.stepTextActive]}>
+          <Text style={[styles.stepText, step4Active && styles.stepTextActive]}>
             Selesai
           </Text>
         </View>
@@ -196,7 +182,9 @@ export default function OrderHistoryScreen({ navigation }) {
             </View>
           }
           renderItem={({ item }) => {
-            const isSiapDiambil = item.status === 'Siap Diambil';
+            const stPesanan = item.status_pesanan || item.status || 'Menunggu';
+            const stBayar = item.status_pembayaran || 'Sudah Dibayar';
+            const isSiapDiambil = stPesanan === 'Siap Diambil';
 
             return (
               <View style={styles.orderCard}>
@@ -231,17 +219,42 @@ export default function OrderHistoryScreen({ navigation }) {
                   </View>
                 </View>
 
-                {/* Jam Pengambilan */}
-                <View style={styles.pickupTimeBox}>
-                  <Ionicons name="time" size={14} color={COLORS.goldenBrown} />
-                  <Text style={styles.pickupTimeLabel}>Target Pengambilan:</Text>
-                  <Text style={styles.pickupTimeValue}>
-                    {item.jam_pengambilan}
-                  </Text>
+                {/* Status Pembayaran & Waktu Transaksi (Revisi Poin 2 & Poin 5) */}
+                <View style={styles.statusMetaRow}>
+                  <View style={styles.metaTimeBadge}>
+                    <Ionicons name="time-outline" size={13} color={COLORS.textSecondary} />
+                    <Text style={styles.metaTimeText}>
+                      {new Date(item.waktu_transaksi).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })} WIB
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.payBadgeMhs,
+                      stBayar === 'Sudah Dibayar' ? styles.payBadgeLunas : styles.payBadgeBelum,
+                    ]}
+                  >
+                    <Ionicons
+                      name={stBayar === 'Sudah Dibayar' ? 'checkmark-circle' : 'hourglass-outline'}
+                      size={12}
+                      color={stBayar === 'Sudah Dibayar' ? COLORS.textSuccessDark : COLORS.urgentOrange}
+                    />
+                    <Text
+                      style={[
+                        styles.payBadgeMhsText,
+                        stBayar === 'Sudah Dibayar' ? styles.payBadgeLunasText : styles.payBadgeBelumText,
+                      ]}
+                    >
+                      {stBayar}
+                    </Text>
+                  </View>
                 </View>
 
                 {/* Tracker Visual Status */}
-                {renderStatusTracker(item.status)}
+                {renderStatusTracker(stPesanan)}
 
                 {/* Rincian Menu */}
                 <View style={styles.itemsSummary}>
@@ -546,5 +559,63 @@ const styles = StyleSheet.create({
     color: COLORS.cardBackground,
     fontSize: 13,
     fontWeight: '700',
+  },
+  statusMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.inputBackground,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 8,
+    borderRadius: RADIUS.md,
+    marginBottom: SPACING.sm,
+  },
+  metaTimeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  metaTimeText: {
+    fontSize: 12,
+    color: COLORS.textBody,
+    fontWeight: '600',
+  },
+  payBadgeMhs: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.full,
+    gap: 4,
+  },
+  payBadgeLunas: {
+    backgroundColor: COLORS.badgeSuccess,
+  },
+  payBadgeBelum: {
+    backgroundColor: COLORS.statusWaitingBg,
+  },
+  payBadgeMhsText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  payBadgeLunasText: {
+    color: COLORS.textSuccessDark,
+  },
+  payBadgeBelumText: {
+    color: COLORS.urgentOrange,
+  },
+  cancelledBannerBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.dangerBg,
+    padding: 10,
+    borderRadius: RADIUS.md,
+    gap: 8,
+    marginVertical: 8,
+  },
+  cancelledBannerText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.danger,
   },
 });
