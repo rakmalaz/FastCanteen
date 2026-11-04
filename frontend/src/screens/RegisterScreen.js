@@ -231,7 +231,7 @@ export default function RegisterScreen({ navigation }) {
             ) : (
               <View style={styles.buttonInner}>
                 <Text style={styles.submitButtonText}>
-                  {role === 'mahasiswa' ? 'Daftar sebagai Mahasiswa' : 'Daftar Stan Kantin'}
+                  Daftar sebagai Mahasiswa
                 </Text>
                 <Ionicons name="checkmark-circle" size={18} color={COLORS.cardBackground} />
               </View>

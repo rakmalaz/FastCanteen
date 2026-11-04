@@ -17,6 +17,65 @@ import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../constants/theme';
 
+// ---------------------------------------------------------------
+// DATA PEMBAYARAN SIMULASI — ganti dengan data asli kantin Anda
+// ---------------------------------------------------------------
+// Untuk memakai gambar QRIS asli: taruh file di frontend/assets/images/qris.png
+// lalu ubah menjadi: const QRIS_IMAGE = require('../../assets/images/qris.png');
+const QRIS_IMAGE = null;
+
+const EWALLET_ACCOUNTS = [
+  { nama: 'DANA', nomor: '0812-3456-7890', icon: 'wallet-outline' },
+  { nama: 'GoPay', nomor: '0812-3456-7890', icon: 'phone-portrait-outline' },
+  { nama: 'ShopeePay', nomor: '0812-3456-7890', icon: 'cart-outline' },
+];
+
+// QR simulasi (tidak bisa di-scan sungguhan), dibuat dari View agar tanpa library tambahan
+const QR_GRID = 21;
+const buildQrMatrix = (seedText) => {
+  let seed = 7;
+  for (let i = 0; i < seedText.length; i++) {
+    seed = (seed * 31 + seedText.charCodeAt(i)) >>> 0;
+  }
+  const rand = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  const finderDark = (lr, lc) =>
+    lr === 0 || lr === 6 || lc === 0 || lc === 6 || (lr >= 2 && lr <= 4 && lc >= 2 && lc <= 4);
+  const rows = [];
+  for (let r = 0; r < QR_GRID; r++) {
+    const row = [];
+    for (let c = 0; c < QR_GRID; c++) {
+      if (r < 7 && c < 7) row.push(finderDark(r, c));
+      else if (r < 7 && c >= QR_GRID - 7) row.push(finderDark(r, c - (QR_GRID - 7)));
+      else if (r >= QR_GRID - 7 && c < 7) row.push(finderDark(r - (QR_GRID - 7), c));
+      else row.push(rand() > 0.5);
+    }
+    rows.push(row);
+  }
+  return rows;
+};
+
+function SimulatedQR({ seed, size }) {
+  const matrix = React.useMemo(() => buildQrMatrix(seed), [seed]);
+  const cell = size / QR_GRID;
+  return (
+    <View style={{ width: size, height: size, backgroundColor: '#FFFFFF' }}>
+      {matrix.map((row, r) => (
+        <View key={r} style={{ flexDirection: 'row', height: cell }}>
+          {row.map((dark, c) => (
+            <View
+              key={c}
+              style={{ width: cell, height: cell, backgroundColor: dark ? '#000000' : '#FFFFFF' }}
+            />
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export default function CartCheckoutScreen({ navigation }) {
   const { user } = useAuth();
   const {
@@ -33,7 +92,12 @@ export default function CartCheckoutScreen({ navigation }) {
   const [catatan, setCatatan] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('QRIS'); // 'QRIS' | 'E-Wallet' | 'Tunai'
   const [submitting, setSubmitting] = useState(false);
-  const [buktiUploaded, setBuktiUploaded] = useState(true); // US-07 default simulasi bukti valid
+  const [paidConfirmed, setPaidConfirmed] = useState(false); // simulasi: user menekan "Saya Sudah Bayar"
+
+  const selectMethod = (method) => {
+    setPaymentMethod(method);
+    setPaidConfirmed(false);
+  };
 
   const formatIDR = (val) => {
     return 'Rp ' + Number(val).toLocaleString('id-ID');
@@ -52,16 +116,28 @@ export default function CartCheckoutScreen({ navigation }) {
       return;
     }
 
+    if (paymentMethod !== 'Tunai' && !paidConfirmed) {
+      Alert.alert(
+        'Pembayaran Belum Selesai',
+        paymentMethod === 'QRIS'
+          ? 'Scan kode QRIS terlebih dahulu, lalu tekan "Saya Sudah Bayar".'
+          : 'Transfer ke salah satu nomor e-wallet, lalu tekan "Saya Sudah Bayar".'
+      );
+      return;
+    }
+
     setSubmitting(true);
     try {
       const orderPayload = {
         id_mahasiswa: user.id,
         id_tenant: activeTenant?.id || items[0].id_tenant,
         metode_pembayaran: paymentMethod,
+        // Tunai = Belum Dibayar (dibayar saat ambil di stan); QRIS/E-Wallet = Sudah Dibayar
+        status_pembayaran: paymentMethod === 'Tunai' ? 'Belum Dibayar' : 'Sudah Dibayar',
         catatan: catatan.trim() || null,
         bukti_pembayaran:
-          paymentMethod !== 'Tunai' && buktiUploaded
-            ? 'https://via.placeholder.com/400?text=Bukti+QRIS+Terverifikasi+FastCanteen'
+          paymentMethod !== 'Tunai'
+            ? 'https://via.placeholder.com/400?text=Bukti+Pembayaran+FastCanteen'
             : null,
         items: items.map((item) => ({
           id_menu: item.id,
@@ -75,7 +151,9 @@ export default function CartCheckoutScreen({ navigation }) {
         clearCart();
         Alert.alert(
           'Pre-Order Berhasil Dibuat! 🎉',
-          `Pesanan #${res.data.data.id_pesanan} telah diteruskan ke stan ${activeTenant?.nama_tenant}. Pesanan Anda segera diproses!`,
+          paymentMethod === 'Tunai'
+            ? `Pesanan #${res.data.data.id_pesanan} telah diteruskan ke stan ${activeTenant?.nama_tenant}.\n\nStatus pembayaran: Belum Dibayar. Silakan bayar tunai saat mengambil pesanan.`
+            : `Pesanan #${res.data.data.id_pesanan} telah diteruskan ke stan ${activeTenant?.nama_tenant}.\n\nStatus pembayaran: Sudah Dibayar. Pesanan Anda segera diproses!`,
           [
             {
               text: 'Lihat Status Pesanan',
@@ -114,6 +192,22 @@ export default function CartCheckoutScreen({ navigation }) {
       </View>
     );
   }
+
+  const paidAction = paidConfirmed ? (
+    <View style={styles.proofBadge}>
+      <Ionicons name="checkmark-circle" size={14} color={COLORS.textSuccessDark} />
+      <Text style={styles.proofBadgeText}>Pembayaran Diterima (Simulasi)</Text>
+    </View>
+  ) : (
+    <TouchableOpacity
+      style={styles.paidButton}
+      onPress={() => setPaidConfirmed(true)}
+      activeOpacity={0.85}
+    >
+      <Ionicons name="checkmark-done" size={16} color={COLORS.cardBackground} />
+      <Text style={styles.paidButtonText}>Saya Sudah Bayar</Text>
+    </TouchableOpacity>
+  );
 
   return (
     <View style={styles.container}>
@@ -228,7 +322,7 @@ export default function CartCheckoutScreen({ navigation }) {
               styles.paymentOption,
               paymentMethod === 'QRIS' && styles.paymentOptionActive,
             ]}
-            onPress={() => setPaymentMethod('QRIS')}
+            onPress={() => selectMethod('QRIS')}
             activeOpacity={0.8}
           >
             <View style={styles.paymentLeft}>
@@ -253,7 +347,7 @@ export default function CartCheckoutScreen({ navigation }) {
               styles.paymentOption,
               paymentMethod === 'E-Wallet' && styles.paymentOptionActive,
             ]}
-            onPress={() => setPaymentMethod('E-Wallet')}
+            onPress={() => selectMethod('E-Wallet')}
             activeOpacity={0.8}
           >
             <View style={styles.paymentLeft}>
@@ -278,7 +372,7 @@ export default function CartCheckoutScreen({ navigation }) {
               styles.paymentOption,
               paymentMethod === 'Tunai' && styles.paymentOptionActive,
             ]}
-            onPress={() => setPaymentMethod('Tunai')}
+            onPress={() => selectMethod('Tunai')}
             activeOpacity={0.8}
           >
             <View style={styles.paymentLeft}>
@@ -297,21 +391,72 @@ export default function CartCheckoutScreen({ navigation }) {
             />
           </TouchableOpacity>
 
-          {/* Panel Informasi QRIS & Bukti Pembayaran (US-07) */}
-          {paymentMethod !== 'Tunai' && (
+          {/* Panel pembayaran sesuai metode yang dipilih */}
+          {paymentMethod === 'QRIS' && (
             <View style={styles.qrisInfoBox}>
               <View style={styles.qrisHeaderRow}>
-                <Ionicons name="shield-checkmark" size={18} color={COLORS.activeGreen} />
-                <Text style={styles.qrisTitle}>Simulasi Pembayaran Non-Tunai</Text>
+                <Ionicons name="qr-code" size={18} color={COLORS.activeGreen} />
+                <Text style={styles.qrisTitle}>Scan QRIS untuk Membayar</Text>
+              </View>
+              <View style={styles.payQrFrame}>
+                {QRIS_IMAGE ? (
+                  <Image source={QRIS_IMAGE} style={styles.payQrImage} resizeMode="contain" />
+                ) : (
+                  <SimulatedQR seed={`QRIS-${activeTenant?.id || 0}-${totalAmount}`} size={168} />
+                )}
+              </View>
+              <Text style={styles.payAmount}>{formatIDR(totalAmount)}</Text>
+              <Text style={styles.qrisDesc}>
+                Buka aplikasi bank atau e-wallet, scan kode di atas, lalu tekan tombol di bawah
+                setelah pembayaran berhasil.
+              </Text>
+              {paidAction}
+            </View>
+          )}
+
+          {paymentMethod === 'E-Wallet' && (
+            <View style={styles.qrisInfoBox}>
+              <View style={styles.qrisHeaderRow}>
+                <Ionicons name="wallet" size={18} color={COLORS.activeGreen} />
+                <Text style={styles.qrisTitle}>Transfer ke Nomor E-Wallet</Text>
+              </View>
+              {EWALLET_ACCOUNTS.map((acc) => (
+                <View key={acc.nama} style={styles.walletRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.walletName}>{acc.nama}</Text>
+                    <Text style={styles.walletNumber} selectable>
+                      {acc.nomor}
+                    </Text>
+                  </View>
+                  <Ionicons name={acc.icon} size={20} color={COLORS.textSecondary} />
+                </View>
+              ))}
+              <Text style={styles.walletOwner}>
+                a.n. {activeTenant?.nama_tenant || 'Kantin UINSA'}
+              </Text>
+              <Text style={styles.payAmount}>{formatIDR(totalAmount)}</Text>
+              <Text style={styles.qrisDesc}>
+                Transfer sesuai total tagihan ke salah satu nomor di atas, lalu tekan tombol di
+                bawah setelah pembayaran berhasil.
+              </Text>
+              {paidAction}
+            </View>
+          )}
+
+          {paymentMethod === 'Tunai' && (
+            <View style={styles.qrisInfoBox}>
+              <View style={styles.qrisHeaderRow}>
+                <Ionicons name="cash-outline" size={18} color={COLORS.goldenBrown} />
+                <Text style={styles.qrisTitle}>Bayar Tunai di Stan</Text>
+              </View>
+              <View style={styles.unpaidBadge}>
+                <Ionicons name="time-outline" size={14} color={COLORS.dangerDark} />
+                <Text style={styles.unpaidBadgeText}>Belum Dibayar</Text>
               </View>
               <Text style={styles.qrisDesc}>
-                Sistem FastCanteen memverifikasi bukti transaksi secara otomatis untuk
-                mempercepat penerimaan pesanan oleh pihak tenant.
+                Siapkan uang tunai {formatIDR(totalAmount)} dan bayar saat mengambil pesanan di
+                stan. Status pembayaran tetap "Belum Dibayar" sampai tenant menerima uang Anda.
               </Text>
-              <View style={styles.proofBadge}>
-                <Ionicons name="checkmark-circle" size={14} color={COLORS.textSuccessDark} />
-                <Text style={styles.proofBadgeText}>Bukti Valid Terlampir Otomatis</Text>
-              </View>
             </View>
           )}
         </View>
@@ -694,5 +839,85 @@ const styles = StyleSheet.create({
     color: COLORS.cardBackground,
     fontSize: 14,
     fontWeight: '700',
+  },
+  payQrFrame: {
+    alignSelf: 'center',
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    borderRadius: RADIUS.md,
+    marginTop: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.inactiveTab,
+  },
+  payQrImage: {
+    width: 168,
+    height: 168,
+  },
+  payAmount: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: COLORS.primaryDark,
+    textAlign: 'center',
+    marginTop: SPACING.sm,
+  },
+  walletRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: RADIUS.md,
+    paddingVertical: 10,
+    paddingHorizontal: SPACING.md,
+    marginTop: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.inactiveTab,
+  },
+  walletName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  walletNumber: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    letterSpacing: 0.5,
+  },
+  walletOwner: {
+    fontSize: 12,
+    color: COLORS.textBody,
+    marginTop: SPACING.sm,
+    textAlign: 'center',
+  },
+  paidButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: COLORS.primaryDark,
+    borderRadius: RADIUS.md,
+    paddingVertical: 11,
+    marginTop: SPACING.md,
+  },
+  paidButtonText: {
+    color: COLORS.cardBackground,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  unpaidBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    backgroundColor: COLORS.dangerBg,
+    borderRadius: RADIUS.md,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    marginTop: SPACING.sm,
+    marginBottom: 4,
+  },
+  unpaidBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.dangerDark,
   },
 });
