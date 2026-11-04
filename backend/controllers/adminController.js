@@ -56,15 +56,16 @@ exports.getOverview = async (req, res) => {
             SELECT 
                 COUNT(*) as total_pesanan,
                 COALESCE(SUM(total_harga), 0) as total_omzet,
-                SUM(CASE WHEN status = 'Diproses' THEN 1 ELSE 0 END) as diproses,
-                SUM(CASE WHEN status = 'Siap Diambil' THEN 1 ELSE 0 END) as siap_diambil,
-                SUM(CASE WHEN status = 'Selesai' THEN 1 ELSE 0 END) as selesai
+                SUM(CASE WHEN status_pesanan = 'Menunggu' THEN 1 ELSE 0 END) as menunggu,
+                SUM(CASE WHEN status_pesanan = 'Diproses' THEN 1 ELSE 0 END) as diproses,
+                SUM(CASE WHEN status_pesanan = 'Siap Diambil' THEN 1 ELSE 0 END) as siap_diambil,
+                SUM(CASE WHEN status_pesanan = 'Selesai' THEN 1 ELSE 0 END) as selesai
             FROM pesanan
         `);
 
         // 3. Pesanan Terbaru lintas semua tenant (5 transaksi terakhir)
         const [recentOrders] = await db.query(`
-            SELECT p.id, p.total_harga, p.status, p.jam_pengambilan, p.metode_pembayaran, p.waktu_transaksi,
+            SELECT p.id, p.total_harga, p.status_pesanan, p.status_pembayaran, p.metode_pembayaran, p.waktu_transaksi,
                    t.nama_tenant, t.lokasi_stan,
                    m.nama as nama_mahasiswa, m.nim as nim_mahasiswa
             FROM pesanan p
@@ -245,7 +246,8 @@ exports.deleteTenant = async (req, res) => {
 // Mengambil seluruh pesanan kantin secara menyeluruh (Semua Tenant)
 exports.getAllOrders = async (req, res) => {
     try {
-        const { status } = req.query;
+        const { status, status_pesanan, status_pembayaran } = req.query;
+        const targetStatus = status_pesanan || status;
 
         let query = `
             SELECT p.*,
@@ -257,9 +259,14 @@ exports.getAllOrders = async (req, res) => {
         `;
         const params = [];
 
-        if (status) {
-            query += ' WHERE p.status = ?';
-            params.push(status);
+        if (targetStatus) {
+            query += ' WHERE p.status_pesanan = ?';
+            params.push(targetStatus);
+        }
+
+        if (status_pembayaran) {
+            query += targetStatus ? ' AND p.status_pembayaran = ?' : ' WHERE p.status_pembayaran = ?';
+            params.push(status_pembayaran);
         }
 
         query += ' ORDER BY p.id DESC';
