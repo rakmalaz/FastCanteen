@@ -100,7 +100,7 @@ async function seed() {
         const [orderResult] = await db.query(
             `INSERT INTO pesanan 
              (id_mahasiswa, id_tenant, total_harga, metode_pembayaran, status_pembayaran, status_pesanan, bukti_pembayaran, catatan)
-             VALUES (?, ?, ?, 'QRIS', 'Sudah Dibayar', 'Diproses', 'https://via.placeholder.com/300?text=Bukti+QRIS+Lunas', 'Pedas sedang, koya dipisah')`,
+             VALUES (?, ?, ?, 'QRIS', 'Sudah Dibayar', 'Diproses', NULL, 'Pedas sedang, koya dipisah')`,
             [userMap['elka@uinsa.ac.id'] || 1, t1, totalHarga]
         );
 

@@ -13,11 +13,21 @@ import {
   ScrollView,
   Platform,
   Linking,
+  Image,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import API from '../api/axios';
+import API, { resolveBuktiUrl } from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../constants/theme';
+
+// Alasan cepat saat menolak bukti pembayaran
+const ALASAN_TOLAK = [
+  'Nominal tidak sesuai',
+  'Gambar buram atau tidak jelas',
+  'Transaksi tidak ada di mutasi',
+  'Bukti bukan untuk pesanan ini',
+];
 
 export default function TenantDashboardScreen({ navigation }) {
   const { user, logout } = useAuth();
@@ -43,6 +53,19 @@ export default function TenantDashboardScreen({ navigation }) {
 
   // Modal Kirim Notifikasi Langsung ke Mahasiswa (Poin 7)
   const [notifModalVisible, setNotifModalVisible] = useState(false);
+
+  // Modal Lihat Bukti Pembayaran (US-07)
+  const [buktiModalUri, setBuktiModalUri] = useState(null);
+  const [buktiError, setBuktiError] = useState(false);
+  const tutupBukti = () => {
+    setBuktiModalUri(null);
+    setBuktiError(false);
+  };
+
+  // Modal Tolak Bukti Pembayaran (verifikasi)
+  const [rejectOrder, setRejectOrder] = useState(null);
+  const [rejectNote, setRejectNote] = useState('');
+  const [verifLoading, setVerifLoading] = useState(false);
   const [targetOrderForNotif, setTargetOrderForNotif] = useState(null);
   const [notifTitle, setNotifTitle] = useState('');
   const [notifMessage, setNotifMessage] = useState('');
@@ -216,8 +239,81 @@ export default function TenantDashboardScreen({ navigation }) {
     return 'Rp ' + Number(val || 0).toLocaleString('id-ID');
   };
 
+  // ---------- Verifikasi pembayaran ----------
+  const perluVerifikasi = (o) =>
+    o.metode_pembayaran !== 'Tunai' &&
+    o.status_pembayaran === 'Menunggu Verifikasi' &&
+    (o.status_pesanan || o.status) === 'Menunggu';
+
+  const jumlahPerluVerifikasi = orders.filter(perluVerifikasi).length;
+
+  // Bukti contoh (placeholder) dari versi lama aplikasi bukan bukti pembayaran sungguhan
+  const adaBuktiAsli = (nilai) => !!nilai && !/placeholder\.com/i.test(nilai);
+
+  const kirimVerifikasi = async (orderId, aksi, catatan) => {
+    setVerifLoading(true);
+    try {
+      const res = await API.put(`/pesanan/${orderId}/verifikasi`, {
+        aksi,
+        catatan,
+        id_verifikator: user?.id,
+      });
+      if (res.data.success) {
+        const dibatalkan = res.data.data?.status_pesanan === 'Dibatalkan';
+        if (aksi === 'valid') {
+          Alert.alert(
+            'Pembayaran Terverifikasi',
+            `Pembayaran pesanan #${orderId} sudah diverifikasi. Pesanan sekarang bisa diproses.`,
+            [{ text: 'OK' }],
+            { tone: 'success' }
+          );
+        } else if (aksi === 'minta_ulang' && !dibatalkan) {
+          Alert.alert(
+            'Permintaan Unggah Ulang Terkirim',
+            `Pembeli pesanan #${orderId} sudah diberi tahu dan dapat mengunggah bukti pembayaran yang baru.`,
+            [{ text: 'OK' }],
+            { tone: 'warning' }
+          );
+        } else if (aksi === 'minta_ulang') {
+          Alert.alert(
+            'Pesanan Dibatalkan',
+            `Bukti pembayaran pesanan #${orderId} sudah ditolak 3 kali, sehingga pesanan dibatalkan otomatis.`,
+            [{ text: 'OK' }],
+            { tone: 'danger' }
+          );
+        } else {
+          Alert.alert(
+            'Pesanan Dibatalkan',
+            `Pesanan #${orderId} dibatalkan karena bukti pembayaran tidak valid. Pembeli sudah diberi tahu.`,
+            [{ text: 'OK' }],
+            { tone: 'danger' }
+          );
+        }
+        fetchData();
+      }
+    } catch (err) {
+      Alert.alert('Gagal Memverifikasi', err.response?.data?.message || err.message);
+    } finally {
+      setVerifLoading(false);
+      setRejectOrder(null);
+      setRejectNote('');
+    }
+  };
+
+  const handleVerifikasiValid = (order) => {
+    Alert.alert(
+      'Verifikasi Pembayaran',
+      `Pastikan uang ${formatIDR(order.total_harga)} sudah masuk ke rekening atau e-wallet Anda. Lanjutkan?`,
+      [
+        { text: 'Batal', style: 'cancel' },
+        { text: 'Ya, Pembayaran Valid', onPress: () => kirimVerifikasi(order.id, 'valid') },
+      ]
+    );
+  };
+
   const filteredOrders = orders.filter((o) => {
     if (statusFilter === 'Semua') return true;
+    if (statusFilter === 'Perlu Verifikasi') return perluVerifikasi(o);
     const currentStatus = o.status_pesanan || o.status;
     return currentStatus === statusFilter;
   });
@@ -340,8 +436,13 @@ export default function TenantDashboardScreen({ navigation }) {
       {activeTab === 'orders' && (
         <>
           {/* Sub-Filter Status */}
-          <View style={styles.statusFilterRow}>
-            {['Semua', 'Menunggu', 'Diproses', 'Siap Diambil', 'Selesai'].map((st) => {
+          <View style={styles.statusFilterWrap}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={[styles.statusFilterRow, { alignItems: 'center', marginTop: 0 }]}
+          >
+            {['Semua', 'Perlu Verifikasi', 'Menunggu', 'Diproses', 'Siap Diambil', 'Selesai'].map((st) => {
               const isSelected = statusFilter === st;
               return (
                 <TouchableOpacity
@@ -358,11 +459,14 @@ export default function TenantDashboardScreen({ navigation }) {
                       isSelected && styles.statusChipTextActive,
                     ]}
                   >
-                    {st}
+                    {st === 'Perlu Verifikasi' && jumlahPerluVerifikasi > 0
+                      ? `Perlu Verifikasi (${jumlahPerluVerifikasi})`
+                      : st}
                   </Text>
                 </TouchableOpacity>
               );
             })}
+          </ScrollView>
           </View>
 
           {loading ? (
@@ -400,6 +504,10 @@ export default function TenantDashboardScreen({ navigation }) {
                 const isSiap = stPesanan === 'Siap Diambil';
                 const isSelesai = stPesanan === 'Selesai';
                 const isDibatalkan = stPesanan === 'Dibatalkan';
+                const isTunai = item.metode_pembayaran === 'Tunai';
+                const menungguVerif = !isTunai && stBayar === 'Menunggu Verifikasi' && isMenunggu;
+                const buktiDitolak = !isTunai && stBayar === 'Bukti Ditolak' && isMenunggu;
+                const terkunci = !isTunai && stBayar !== 'Sudah Dibayar' && isMenunggu; // belum boleh dimasak
 
                 return (
                   <View style={styles.orderCard}>
@@ -422,6 +530,7 @@ export default function TenantDashboardScreen({ navigation }) {
                           stBayar === 'Sudah Dibayar'
                             ? styles.payStatusLunas
                             : styles.payStatusBelum,
+                          stBayar === 'Bukti Ditolak' && styles.payStatusDitolak,
                         ]}
                       >
                         <Ionicons
@@ -435,6 +544,7 @@ export default function TenantDashboardScreen({ navigation }) {
                             stBayar === 'Sudah Dibayar'
                               ? styles.payStatusLunasText
                               : styles.payStatusBelumText,
+                            stBayar === 'Bukti Ditolak' && styles.payStatusDitolakText,
                           ]}
                         >
                           {stBayar}
@@ -530,6 +640,58 @@ export default function TenantDashboardScreen({ navigation }) {
                       </View>
                     </View>
 
+                    {/* Bukti Pembayaran (US-07) */}
+                    {item.metode_pembayaran !== 'Tunai' &&
+                      (adaBuktiAsli(item.bukti_pembayaran) ? (
+                        <TouchableOpacity
+                          style={styles.buktiBtn}
+                          onPress={() => setBuktiModalUri(resolveBuktiUrl(item.bukti_pembayaran))}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="receipt-outline" size={15} color={COLORS.primaryDark} />
+                          <Text style={styles.buktiBtnText}>Lihat Bukti Pembayaran</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <Text style={styles.buktiMissing}>Belum ada bukti pembayaran</Text>
+                      ))}
+
+                    {/* Verifikasi Pembayaran */}
+                    {menungguVerif && (
+                      <View style={styles.verifBox}>
+                        <Text style={styles.verifHint}>
+                          Cek mutasi rekening atau e-wallet Anda: harus ada uang masuk{' '}
+                          {formatIDR(item.total_harga)}, lalu verifikasi.
+                        </Text>
+                        <View style={styles.verifRow}>
+                          <TouchableOpacity
+                            style={styles.verifValidBtn}
+                            onPress={() => handleVerifikasiValid(item)}
+                            activeOpacity={0.85}
+                          >
+                            <Ionicons name="shield-checkmark" size={15} color={COLORS.cardBackground} />
+                            <Text style={styles.verifValidText}>Pembayaran Valid</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.verifRejectBtn}
+                            onPress={() => {
+                              setRejectNote('');
+                              setRejectOrder(item);
+                            }}
+                            activeOpacity={0.85}
+                          >
+                            <Ionicons name="close-circle-outline" size={15} color={COLORS.danger} />
+                            <Text style={styles.verifRejectText}>Tolak</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    )}
+                    {buktiDitolak && (
+                      <Text style={styles.verifWaiting}>
+                        Menunggu pembeli mengunggah ulang bukti ({item.jumlah_penolakan || 0}/3 ditolak)
+                        {item.catatan_verifikasi ? `. Alasan: ${item.catatan_verifikasi}` : ''}
+                      </Text>
+                    )}
+
                     {/* Action Buttons: US-08 Update Status & Kirim Notif (Poin 7) */}
                     <View style={styles.actionRow}>
                       {/* Tombol Kirim Pesan / Notifikasi Custom */}
@@ -546,6 +708,7 @@ export default function TenantDashboardScreen({ navigation }) {
 
                       {isMenunggu && (
                         <>
+                          {!terkunci && (
                           <TouchableOpacity
                             style={styles.processButton}
                             onPress={() => handleUpdateStatus(item.id, 'Diproses')}
@@ -554,6 +717,8 @@ export default function TenantDashboardScreen({ navigation }) {
                             <Ionicons name="flame" size={15} color={COLORS.cardBackground} />
                             <Text style={styles.readyButtonText}>Terima & Masak</Text>
                           </TouchableOpacity>
+                          )}
+                          {!(menungguVerif || buktiDitolak) && (
                           <TouchableOpacity
                             style={styles.cancelOrderBtn}
                             onPress={() =>
@@ -570,6 +735,7 @@ export default function TenantDashboardScreen({ navigation }) {
                           >
                             <Ionicons name="close" size={15} color={COLORS.danger} />
                           </TouchableOpacity>
+                          )}
                         </>
                       )}
 
@@ -741,6 +907,172 @@ export default function TenantDashboardScreen({ navigation }) {
               </TouchableOpacity>
             </ScrollView>
           </View>
+        </View>
+      </Modal>
+
+      {/* Modal Tolak Bukti Pembayaran */}
+      <Modal
+        visible={!!rejectOrder}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setRejectOrder(null)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          {/* Area gelap di atas: ketuk untuk menutup */}
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            activeOpacity={1}
+            onPress={() => setRejectOrder(null)}
+          />
+
+          <View style={styles.rejectSheet}>
+            <View style={styles.rejectHandle} />
+
+            <View style={styles.rejectHeader}>
+              <View style={styles.rejectHeaderIcon}>
+                <Ionicons name="close-circle" size={26} color={COLORS.danger} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rejectTitle}>Tolak Bukti Pembayaran</Text>
+                <Text style={styles.rejectSubtitle} numberOfLines={2}>
+                  Pesanan #{rejectOrder?.id} • {rejectOrder?.nama_mahasiswa} •{' '}
+                  {formatIDR(rejectOrder?.total_harga)}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setRejectOrder(null)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="close" size={22} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={styles.rejectSection}>Pilih alasan</Text>
+              {ALASAN_TOLAK.map((alasan) => {
+                const dipilih = rejectNote === alasan;
+                return (
+                  <TouchableOpacity
+                    key={alasan}
+                    style={[styles.rejectOption, dipilih && styles.rejectOptionActive]}
+                    onPress={() => setRejectNote(alasan)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[styles.rejectRadio, dipilih && styles.rejectRadioActive]}>
+                      {dipilih && <Ionicons name="checkmark" size={12} color="#FFFFFF" />}
+                    </View>
+                    <Text style={[styles.rejectOptionText, dipilih && styles.rejectOptionTextActive]}>
+                      {alasan}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+
+              <Text style={styles.rejectSection}>Atau tulis alasan sendiri</Text>
+              <TextInput
+                style={styles.rejectInput}
+                placeholder="Contoh: nominal kurang Rp 2.000"
+                placeholderTextColor={COLORS.textSecondary}
+                value={rejectNote}
+                onChangeText={setRejectNote}
+                maxLength={200}
+                multiline
+              />
+
+              <View style={styles.rejectHint}>
+                <Ionicons name="information-circle-outline" size={16} color={COLORS.textSecondary} />
+                <Text style={styles.rejectHintText}>
+                  Pembeli diberi kesempatan mengunggah bukti baru (maksimal 3 kali penolakan). Pilih
+                  "Tolak & Batalkan" hanya jika bukti jelas tidak valid.
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.rejectAskBtn, styles.rejectBtnRow]}
+                disabled={verifLoading}
+                onPress={() => kirimVerifikasi(rejectOrder.id, 'minta_ulang', rejectNote)}
+                activeOpacity={0.85}
+              >
+                {verifLoading ? (
+                  <ActivityIndicator color={COLORS.cardBackground} />
+                ) : (
+                  <>
+                    <Ionicons name="cloud-upload-outline" size={18} color={COLORS.cardBackground} />
+                    <Text style={styles.rejectAskText}>Minta Unggah Ulang</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.rejectCancelOrderBtn, styles.rejectBtnRow]}
+                disabled={verifLoading}
+                onPress={() =>
+                  Alert.alert(
+                    'Tolak & Batalkan Pesanan',
+                    `Batalkan pesanan #${rejectOrder?.id} karena bukti tidak valid? Pembeli tidak bisa mengunggah ulang.`,
+                    [
+                      { text: 'Kembali', style: 'cancel' },
+                      {
+                        text: 'Ya, Batalkan',
+                        style: 'destructive',
+                        onPress: () => kirimVerifikasi(rejectOrder.id, 'tolak_batal', rejectNote),
+                      },
+                    ]
+                  )
+                }
+                activeOpacity={0.85}
+              >
+                <Ionicons name="close-circle-outline" size={18} color={COLORS.danger} />
+                <Text style={styles.rejectCancelOrderText}>Tolak & Batalkan Pesanan</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.rejectBackBtn}
+                onPress={() => setRejectOrder(null)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.rejectBackText}>Batal</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Modal Lihat Bukti Pembayaran (US-07) */}
+      <Modal
+        visible={!!buktiModalUri}
+        animationType="fade"
+        transparent
+        onRequestClose={tutupBukti}
+      >
+        <View style={styles.buktiOverlay}>
+          <TouchableOpacity
+            style={styles.buktiClose}
+            onPress={tutupBukti}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="close" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+          {buktiModalUri && !buktiError ? (
+            <Image
+              source={{ uri: buktiModalUri }}
+              style={styles.buktiFull}
+              resizeMode="contain"
+              onError={() => setBuktiError(true)}
+            />
+          ) : null}
+          {buktiModalUri && buktiError ? (
+            <View style={styles.buktiErrorBox}>
+              <Ionicons name="image-outline" size={44} color="#FFFFFF" />
+              <Text style={styles.buktiErrorText}>
+                Gambar bukti tidak dapat dimuat. File mungkin sudah terhapus dari server, atau server
+                tidak dapat dijangkau.
+              </Text>
+            </View>
+          ) : null}
         </View>
       </Modal>
 
@@ -1384,5 +1716,285 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: COLORS.cardBackground,
+  },
+  buktiBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    marginTop: SPACING.sm,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.primaryDark,
+  },
+  buktiBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primaryDark,
+  },
+  buktiMissing: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.danger,
+    marginTop: SPACING.sm,
+  },
+  buktiOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  buktiFull: {
+    width: '94%',
+    height: '78%',
+  },
+  buktiClose: {
+    position: 'absolute',
+    top: 48,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  payStatusDitolak: {
+    backgroundColor: COLORS.dangerBg,
+  },
+  payStatusDitolakText: {
+    color: COLORS.dangerDark,
+  },
+  verifBox: {
+    marginTop: SPACING.sm,
+    backgroundColor: COLORS.statusWaitingBg,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+  },
+  verifHint: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: COLORS.brownDark,
+    fontWeight: '600',
+  },
+  verifRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginTop: SPACING.sm,
+  },
+  verifValidBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.md,
+    paddingVertical: 10,
+  },
+  verifValidText: {
+    color: COLORS.cardBackground,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  verifRejectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.danger,
+    paddingVertical: 10,
+    paddingHorizontal: SPACING.lg,
+  },
+  verifRejectText: {
+    color: COLORS.danger,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  verifWaiting: {
+    marginTop: SPACING.sm,
+    fontSize: 12,
+    lineHeight: 17,
+    color: COLORS.dangerDark,
+    fontWeight: '600',
+  },
+  rejectInput: {
+    backgroundColor: COLORS.inputBackground,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    minHeight: 64,
+    fontSize: 13,
+    color: COLORS.textPrimary,
+    textAlignVertical: 'top',
+  },
+  rejectAskBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.md,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: SPACING.md,
+  },
+  rejectAskText: {
+    color: COLORS.cardBackground,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  rejectCancelOrderBtn: {
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.danger,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: SPACING.sm,
+  },
+  rejectCancelOrderText: {
+    color: COLORS.danger,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  statusFilterWrap: {
+    height: 50,
+    flexGrow: 0,
+    flexShrink: 0,
+    justifyContent: 'center',
+  },
+  buktiErrorBox: {
+    width: '84%',
+    alignItems: 'center',
+    gap: SPACING.md,
+  },
+  buktiErrorText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  modalCard: {
+    backgroundColor: COLORS.cardBackground,
+    borderTopLeftRadius: RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    padding: SPACING.xl,
+    paddingBottom: 28,
+    maxHeight: '85%',
+  },
+  rejectSheet: {
+    backgroundColor: COLORS.cardBackground,
+    borderTopLeftRadius: RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.sm,
+    paddingBottom: 24,
+    maxHeight: '88%',
+  },
+  rejectHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.divider,
+    marginBottom: SPACING.md,
+  },
+  rejectHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  rejectHeaderIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.dangerBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rejectTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: COLORS.textPrimary,
+  },
+  rejectSubtitle: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  rejectSection: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+    marginTop: SPACING.md,
+    marginBottom: 8,
+    letterSpacing: 0.3,
+  },
+  rejectOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    paddingVertical: 12,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.inputBackground,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  rejectOptionActive: {
+    backgroundColor: COLORS.dangerBg,
+    borderColor: COLORS.danger,
+  },
+  rejectRadio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: COLORS.divider,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rejectRadioActive: {
+    backgroundColor: COLORS.danger,
+    borderColor: COLORS.danger,
+  },
+  rejectOptionText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textBody,
+  },
+  rejectOptionTextActive: {
+    color: COLORS.dangerDark,
+  },
+  rejectHint: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginTop: SPACING.md,
+  },
+  rejectHintText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    color: COLORS.textSecondary,
+  },
+  rejectBtnRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  rejectBackBtn: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginTop: 4,
+  },
+  rejectBackText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
   },
 });

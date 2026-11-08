@@ -112,9 +112,38 @@ npx expo start -c
 - `GET /api/pesanan/tenant/:id_tenant` : Daftar antrean pesanan masuk pada stan tenant (US-05).
 - `PUT /api/pesanan/:id/status` : Memperbarui status pesanan & otomatis memicu notifikasi (US-08, US-10).
 - `PUT /api/pesanan/:id/status-pembayaran` : Memperbarui status verifikasi pembayaran.
+- `PUT /api/pesanan/:id/bukti` : Mengunggah ulang bukti pembayaran, hanya jika bukti sebelumnya ditolak tenant (body: `bukti_base64`, `bukti_mime` - US-07).
+- `PUT /api/pesanan/:id/verifikasi` : Verifikasi pembayaran oleh tenant (body: `aksi` = `valid` | `minta_ulang` | `tolak_batal`, `catatan`).
 
 ### Sistem Notifikasi (`/api/notifikasi`)
 - `GET /api/notifikasi/user/:id_user` : Mengambil daftar notifikasi milik pengguna beserta jumlah belum dibaca.
 - `PUT /api/notifikasi/:id/baca` : Menandai satu notifikasi telah dibaca.
 - `PUT /api/notifikasi/user/:id_user/baca-semua` : Menandai semua notifikasi pengguna telah dibaca.
 - `POST /api/notifikasi` : Mengirim notifikasi kustom langsung ke pengguna.
+
+---
+
+## 💳 Alur Pembayaran & Bukti Transaksi (US-07)
+
+- **QRIS**: layar checkout menampilkan kode QR (simulasi), total tagihan, dan tombol unggah bukti.
+- **E-Wallet**: layar checkout menampilkan nomor DANA / GoPay / ShopeePay beserta nama stan.
+- **Tunai**: status pembayaran tercatat *Belum Dibayar* sampai pembeli membayar di stan.
+- Untuk **QRIS dan E-Wallet**, pembeli wajib mengunggah screenshot bukti pembayaran. Server menolak pesanan non-tunai tanpa bukti (HTTP 400).
+- Setelah bukti diunggah, pesanan non-tunai berstatus **Menunggu Verifikasi**. Status ini ditentukan oleh server, bukan oleh aplikasi.
+- **Tenant memverifikasi** bukti dengan mencocokkan mutasi rekening atau e-wallet: *Pembayaran Valid* (status menjadi Sudah Dibayar), *Minta Unggah Ulang* (status Bukti Ditolak), atau *Tolak & Batalkan Pesanan*.
+- Pesanan non-tunai **tidak dapat diproses** (Diproses, Siap Diambil, Selesai) sebelum pembayarannya terverifikasi. Aturan ini ditegakkan di server.
+- Bukti yang ditolak dapat diunggah ulang oleh pembeli. Setelah **3 kali penolakan**, pesanan otomatis dibatalkan.
+- Pesanan non-tunai yang tidak terverifikasi dalam **30 menit** dibatalkan otomatis (`BATAS_MENIT_VERIFIKASI` di `backend/controllers/pesananController.js`).
+- Dashboard tenant memiliki filter **Perlu Verifikasi** beserta jumlahnya, dan pesanan yang perlu diverifikasi tampil paling atas.
+- Untuk database yang sudah berjalan, jalankan `backend/migrasi_verifikasi.sql` sekali di phpMyAdmin.
+- File bukti disimpan di `backend/uploads/` (JPG/PNG/WEBP, maks. 5 MB) dan hanya path-nya yang disimpan di database.
+- Tenant melihat bukti melalui tombol **Lihat Bukti Pembayaran** pada kartu pesanan di dashboard tenant.
+- Untuk mengganti kode QR simulasi dengan QRIS asli, ubah `QRIS_IMAGE` dan `EWALLET_ACCOUNTS` di bagian atas `frontend/src/screens/CartCheckoutScreen.js`.
+
+## ⚠️ Keterbatasan & Rencana Pengembangan
+
+- **Verifikasi manual oleh tenant.** Aplikasi hanya menerima gambar bukti dan tidak dapat memastikan keasliannya. Tenant wajib mencocokkan bukti dengan mutasi rekening atau e-wallet miliknya sebelum menekan *Pembayaran Valid*.
+- **Pembayaran masih simulasi.** Belum terhubung ke payment gateway (misalnya Midtrans atau Xendit), sehingga uang yang masuk tidak diverifikasi otomatis.
+- **Belum ada autentikasi berbasis token (JWT).** Backend belum memeriksa identitas pemanggil API, sehingga aturan "hanya tenant pemilik yang boleh memverifikasi" baru terjaga lewat aplikasi, belum di server. Endpoint `PUT /api/pesanan/:id/status-pembayaran` juga masih terbuka. Rencana: menambahkan JWT, menentukan status pembayaran di server, dan membatasi perubahan status hanya untuk tenant pemilik pesanan.
+- **Kata sandi masih disimpan sebagai teks biasa.** Rencana: memakai hashing `bcrypt`.
+- **Kode unik pada nominal pembayaran** dan penanganan pesanan tunai yang tidak diambil (kode pengambilan, penghitung tidak diambil) direncanakan sebagai pengembangan lanjutan.

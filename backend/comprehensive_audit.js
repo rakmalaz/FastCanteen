@@ -113,6 +113,9 @@ async function runComprehensiveAudit() {
       id_mahasiswa: mhsUser.id,
       id_tenant: targetMenu.id_tenant,
       metode_pembayaran: 'QRIS',
+      // US-07: pembayaran non-tunai wajib melampirkan bukti (di sini PNG 1x1 untuk pengujian)
+      bukti_base64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+      bukti_mime: 'image/png',
       catatan: 'Pedas sedang, tolong jangan lama-lama ya',
       items: [{ id_menu: targetMenu.id, jumlah_pesanan: 2 }],
     });
@@ -216,4 +219,3 @@ async function runComprehensiveAudit() {
 }
 
 runComprehensiveAudit();
-

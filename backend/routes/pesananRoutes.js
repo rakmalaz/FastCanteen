@@ -23,7 +23,10 @@ router.put('/:id/status', pesananController.updateStatusPesanan);
 // Ubah Status Pembayaran ('Belum Dibayar', 'Sudah Dibayar', 'Dikembalikan')
 router.put('/:id/status-pembayaran', pesananController.updateStatusPembayaran);
 
-// US-07: Unggah Bukti Transaksi
+// US-07: Unggah (ulang) Bukti Transaksi - hanya jika bukti sebelumnya ditolak
 router.put('/:id/bukti', pesananController.uploadBuktiPembayaran);
+
+// Verifikasi pembayaran oleh tenant: { aksi: 'valid' | 'minta_ulang' | 'tolak_batal', catatan }
+router.put('/:id/verifikasi', pesananController.verifikasiPembayaran);
 
 module.exports = router;

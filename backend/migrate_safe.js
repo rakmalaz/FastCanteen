@@ -89,6 +89,39 @@ async function migrate() {
         );
         console.log('✅ Tabel notifikasi siap');
 
+        // 4b. Fitur verifikasi pembayaran: nilai status baru + kolom pendukung
+        const [[enumInfo]] = await conn.query(
+            `SELECT COLUMN_TYPE AS tipe FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'pesanan' AND COLUMN_NAME = 'status_pembayaran'`,
+            [dbName]
+        );
+        if (enumInfo && !enumInfo.tipe.includes('Menunggu Verifikasi')) {
+            await conn.query(
+                `ALTER TABLE pesanan MODIFY COLUMN status_pembayaran
+                 ENUM('Belum Dibayar','Menunggu Verifikasi','Sudah Dibayar','Bukti Ditolak','Dikembalikan')
+                 NOT NULL DEFAULT 'Belum Dibayar'`
+            );
+            console.log('✅ Status pembayaran: Menunggu Verifikasi & Bukti Ditolak ditambahkan');
+        }
+        const kolomVerifikasi = [
+            ['catatan_verifikasi', 'VARCHAR(255) NULL'],
+            ['jumlah_penolakan', 'TINYINT UNSIGNED NOT NULL DEFAULT 0'],
+            ['diverifikasi_oleh', 'INT NULL'],
+            ['waktu_verifikasi', 'DATETIME NULL'],
+        ];
+        for (const [nama, definisi] of kolomVerifikasi) {
+            if (!(await hasColumn(conn, dbName, 'pesanan', nama))) {
+                await conn.query(`ALTER TABLE pesanan ADD COLUMN ${nama} ${definisi}`);
+                console.log(`✅ Kolom ${nama} ditambahkan`);
+            }
+        }
+
+        // 5. Bersihkan bukti pembayaran palsu (link placeholder) dari data contoh lama
+        const [cleaned] = await conn.query(
+            "UPDATE pesanan SET bukti_pembayaran = NULL WHERE bukti_pembayaran LIKE 'https://via.placeholder.com%'"
+        );
+        console.log(`🧹 Bukti placeholder lama dibersihkan: ${cleaned.affectedRows} pesanan`);
+
         console.log('🎉 Migrasi selesai. Restart backend lalu coba checkout lagi.');
     } catch (err) {
         console.error('❌ Migrasi gagal:', err.message);

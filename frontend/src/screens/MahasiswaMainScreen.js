@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import API, { API_BASE_URL, setServerIP } from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { pilihDanUnggahBukti } from '../utils/uploadBukti';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../constants/theme';
 
 export default function MahasiswaMainScreen({ navigation, route }) {
@@ -62,6 +63,7 @@ export default function MahasiswaMainScreen({ navigation, route }) {
   // DATA STATES: PESANAN & RIWAYAT (US-11)
   // ==========================================
   const [orders, setOrders] = useState([]);
+  const [uploadingId, setUploadingId] = useState(null); // pesanan yang sedang unggah ulang bukti
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [refreshingOrders, setRefreshingOrders] = useState(false);
   const [riwayatFilter, setRiwayatFilter] = useState('Semua'); // 'Semua' | 'Selesai' | 'Dibatalkan'
@@ -188,6 +190,22 @@ export default function MahasiswaMainScreen({ navigation, route }) {
       return () => clearInterval(interval);
     }
   }, [user?.id, lastNotifId]);
+
+  // Unggah ulang bukti pembayaran yang ditolak tenant
+  const handleUnggahUlang = async (order) => {
+    try {
+      setUploadingId(order.id);
+      const hasil = await pilihDanUnggahBukti(order.id);
+      if (!hasil.canceled) {
+        Alert.alert('Bukti Terkirim', 'Bukti pembayaran baru Anda sedang diverifikasi oleh stan.');
+        fetchOrders();
+      }
+    } catch (err) {
+      Alert.alert('Gagal Mengunggah', err.response?.data?.message || err.message);
+    } finally {
+      setUploadingId(null);
+    }
+  };
 
   // Refresh handlers
   const onRefreshMenu = useCallback(() => {
@@ -783,6 +801,7 @@ export default function MahasiswaMainScreen({ navigation, route }) {
                     style={[
                       styles.payBadgeMhs,
                       stBayar === 'Sudah Dibayar' ? styles.payBadgeLunas : styles.payBadgeBelum,
+                      stBayar === 'Bukti Ditolak' && styles.payBadgeDitolak,
                     ]}
                   >
                     <Ionicons
@@ -794,6 +813,7 @@ export default function MahasiswaMainScreen({ navigation, route }) {
                       style={[
                         styles.payBadgeMhsText,
                         stBayar === 'Sudah Dibayar' ? styles.payBadgeLunasText : styles.payBadgeBelumText,
+                        stBayar === 'Bukti Ditolak' && styles.payBadgeDitolakText,
                       ]}
                     >
                       {stBayar}
@@ -823,6 +843,43 @@ export default function MahasiswaMainScreen({ navigation, route }) {
                     </Text>
                   ) : null}
                 </View>
+
+                {/* Info Verifikasi Pembayaran */}
+                {stBayar === 'Menunggu Verifikasi' && item.metode_pembayaran !== 'Tunai' && (
+                  <View style={styles.verifNoticeMhs}>
+                    <Ionicons name="hourglass-outline" size={16} color={COLORS.brownDark} />
+                    <Text style={styles.verifNoticeMhsText}>
+                      Bukti pembayaran Anda sedang diverifikasi oleh stan. Pesanan dimasak setelah
+                      pembayaran terverifikasi.
+                    </Text>
+                  </View>
+                )}
+                {stBayar === 'Bukti Ditolak' && stPesanan === 'Menunggu' && (
+                  <View style={[styles.verifNoticeMhs, styles.verifNoticeMhsRejected]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.verifNoticeMhsText, { color: COLORS.dangerDark }]}>
+                        Bukti pembayaran ditolak
+                        {item.catatan_verifikasi ? `: ${item.catatan_verifikasi}` : '.'} (penolakan{' '}
+                        {item.jumlah_penolakan || 1} dari 3)
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.reuploadBtn}
+                        onPress={() => handleUnggahUlang(item)}
+                        disabled={uploadingId === item.id}
+                        activeOpacity={0.85}
+                      >
+                        {uploadingId === item.id ? (
+                          <ActivityIndicator color={COLORS.cardBackground} />
+                        ) : (
+                          <>
+                            <Ionicons name="cloud-upload-outline" size={15} color={COLORS.cardBackground} />
+                            <Text style={styles.reuploadBtnText}>Unggah Ulang Bukti</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
 
                 {/* Footer Biaya & Tombol Hubungi WhatsApp */}
                 <View style={styles.orderCardFooter}>
@@ -2997,5 +3054,45 @@ const styles = StyleSheet.create({
   notifItemDate: {
     fontSize: 10,
     color: COLORS.textSecondary,
+  },
+  payBadgeDitolak: {
+    backgroundColor: COLORS.dangerBg,
+  },
+  payBadgeDitolakText: {
+    color: COLORS.dangerDark,
+  },
+  verifNoticeMhs: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: COLORS.statusWaitingBg,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginTop: SPACING.sm,
+  },
+  verifNoticeMhsRejected: {
+    backgroundColor: COLORS.dangerBg,
+  },
+  verifNoticeMhsText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
+    color: COLORS.brownDark,
+  },
+  reuploadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.md,
+    paddingVertical: 10,
+    marginTop: SPACING.sm,
+  },
+  reuploadBtnText: {
+    color: COLORS.cardBackground,
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

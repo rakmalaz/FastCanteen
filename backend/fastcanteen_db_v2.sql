@@ -68,9 +68,13 @@ CREATE TABLE `pesanan` (
   `id_tenant` int(11) NOT NULL,
   `total_harga` decimal(10,2) NOT NULL,
   `metode_pembayaran` varchar(50) NOT NULL,
-  `status_pembayaran` enum('Belum Dibayar','Sudah Dibayar','Dikembalikan') NOT NULL DEFAULT 'Sudah Dibayar' COMMENT 'Status Pembayaran: Belum Dibayar (Menunggu upload bukti/verifikasi), Sudah Dibayar (Lunas terverifikasi/QRIS), Dikembalikan (Dana di-refund jika pesanan dibatalkan)',
+  `status_pembayaran` enum('Belum Dibayar','Menunggu Verifikasi','Sudah Dibayar','Bukti Ditolak','Dikembalikan') NOT NULL DEFAULT 'Belum Dibayar' COMMENT 'Belum Dibayar (tunai, bayar di stan), Menunggu Verifikasi (bukti diunggah, tenant mengecek mutasi), Sudah Dibayar (terverifikasi), Bukti Ditolak (pembeli perlu unggah ulang), Dikembalikan (refund)',
   `status_pesanan` enum('Menunggu','Diproses','Siap Diambil','Selesai','Dibatalkan') NOT NULL DEFAULT 'Menunggu' COMMENT 'Status Pemesanan: Menunggu (Pesanan masuk belum diproses), Diproses (Sedang dimasak/disiapkan oleh stan tenant), Siap Diambil (Pesanan matang siap diambil mahasiswa), Selesai (Pesanan telah diambil pembeli), Dibatalkan (Pesanan ditolak/dibatalkan tenant atau pembeli)',
   `bukti_pembayaran` varchar(255) DEFAULT NULL,
+  `catatan_verifikasi` varchar(255) DEFAULT NULL COMMENT 'Alasan penolakan bukti dari tenant',
+  `jumlah_penolakan` tinyint(3) unsigned NOT NULL DEFAULT 0 COMMENT 'Berapa kali bukti ditolak (maks 3, lalu pesanan dibatalkan)',
+  `diverifikasi_oleh` int(11) DEFAULT NULL COMMENT 'ID pengguna tenant yang memverifikasi',
+  `waktu_verifikasi` datetime DEFAULT NULL,
   `catatan` text DEFAULT NULL,
   `waktu_transaksi` datetime DEFAULT current_timestamp(),
   `waktu_perubahan_status` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
@@ -153,7 +157,7 @@ INSERT INTO `menu` (`id`, `id_tenant`, `nama_menu`, `harga`, `foto`, `status_ter
 
 -- Seed: pesanan (tanpa jam_pengambilan, dengan status_pembayaran & status_pesanan)
 INSERT INTO `pesanan` (`id`, `id_mahasiswa`, `id_tenant`, `total_harga`, `metode_pembayaran`, `status_pembayaran`, `status_pesanan`, `bukti_pembayaran`, `catatan`, `waktu_transaksi`, `waktu_perubahan_status`) VALUES
-(1, 1, 1, 25000.00, 'QRIS', 'Sudah Dibayar', 'Diproses', 'https://via.placeholder.com/300?text=Bukti+QRIS+Lunas', 'Pedas sedang, koya dipisah', '2026-10-11 16:45:20', '2026-10-11 16:45:20'),
+(1, 1, 1, 25000.00, 'QRIS', 'Sudah Dibayar', 'Diproses', NULL, 'Pedas sedang, koya dipisah', '2026-10-11 16:45:20', '2026-10-11 16:45:20'),
 (2, 1, 1, 16000.00, 'QRIS', 'Sudah Dibayar', 'Siap Diambil', NULL, 'Kuah dipisah ya bu', '2026-10-11 16:57:21', '2026-10-11 16:57:21');
 
 -- Seed: detail_pesanan

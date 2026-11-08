@@ -69,4 +69,13 @@ export const setServerIP = (newIp) => {
   return newBaseURL;
 };
 
+// URL server (tanpa /api) untuk memuat file upload seperti bukti pembayaran
+export const getServerURL = () => (API.defaults.baseURL || '').replace(/\/api\/?$/, '');
+
+export const resolveBuktiUrl = (value) => {
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value)) return value;
+  return `${getServerURL()}${value}`;
+};
+
 export default API;

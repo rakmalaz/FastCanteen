@@ -10,8 +10,10 @@ import {
   ActivityIndicator,
   Platform,
   Image,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import API from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -76,6 +78,16 @@ function SimulatedQR({ seed, size }) {
   );
 }
 
+// Satu baris pada ringkasan kartu sukses pre-order
+function SummaryRow({ label, value, last, children }) {
+  return (
+    <View style={[styles.summaryRow, !last && styles.summaryRowDivider]}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      {children || <Text style={styles.summaryValue}>{value}</Text>}
+    </View>
+  );
+}
+
 export default function CartCheckoutScreen({ navigation }) {
   const { user } = useAuth();
   const {
@@ -92,11 +104,31 @@ export default function CartCheckoutScreen({ navigation }) {
   const [catatan, setCatatan] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('QRIS'); // 'QRIS' | 'E-Wallet' | 'Tunai'
   const [submitting, setSubmitting] = useState(false);
-  const [paidConfirmed, setPaidConfirmed] = useState(false); // simulasi: user menekan "Saya Sudah Bayar"
+  const [successOrder, setSuccessOrder] = useState(null); // data kartu sukses pre-order
+  const [bukti, setBukti] = useState(null); // { uri, base64, mimeType } screenshot bukti pembayaran
 
   const selectMethod = (method) => {
     setPaymentMethod(method);
-    setPaidConfirmed(false);
+    setBukti(null);
+  };
+
+  const pickBukti = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.5,
+        base64: true,
+      });
+      if (result.canceled) return;
+      const asset = result.assets && result.assets[0];
+      if (!asset || !asset.base64) {
+        Alert.alert('Gambar Tidak Terbaca', 'Silakan pilih gambar bukti pembayaran lainnya.');
+        return;
+      }
+      setBukti({ uri: asset.uri, base64: asset.base64, mimeType: asset.mimeType || 'image/jpeg' });
+    } catch (err) {
+      Alert.alert('Gagal Memilih Gambar', err.message || 'Terjadi kesalahan saat membuka galeri.');
+    }
   };
 
   const formatIDR = (val) => {
@@ -116,12 +148,10 @@ export default function CartCheckoutScreen({ navigation }) {
       return;
     }
 
-    if (paymentMethod !== 'Tunai' && !paidConfirmed) {
+    if (paymentMethod !== 'Tunai' && !bukti) {
       Alert.alert(
-        'Pembayaran Belum Selesai',
-        paymentMethod === 'QRIS'
-          ? 'Scan kode QRIS terlebih dahulu, lalu tekan "Saya Sudah Bayar".'
-          : 'Transfer ke salah satu nomor e-wallet, lalu tekan "Saya Sudah Bayar".'
+        'Bukti Pembayaran Diperlukan',
+        'Lakukan pembayaran, lalu unggah screenshot bukti pembayaran Anda terlebih dahulu.'
       );
       return;
     }
@@ -132,35 +162,31 @@ export default function CartCheckoutScreen({ navigation }) {
         id_mahasiswa: user.id,
         id_tenant: activeTenant?.id || items[0].id_tenant,
         metode_pembayaran: paymentMethod,
-        // Tunai = Belum Dibayar (dibayar saat ambil di stan); QRIS/E-Wallet = Sudah Dibayar
-        status_pembayaran: paymentMethod === 'Tunai' ? 'Belum Dibayar' : 'Sudah Dibayar',
+        // Status pembayaran ditentukan oleh server (Tunai = Belum Dibayar, QRIS/E-Wallet = Menunggu Verifikasi)
         catatan: catatan.trim() || null,
-        bukti_pembayaran:
-          paymentMethod !== 'Tunai'
-            ? 'https://via.placeholder.com/400?text=Bukti+Pembayaran+FastCanteen'
-            : null,
+        bukti_base64: paymentMethod !== 'Tunai' ? bukti.base64 : undefined,
+        bukti_mime: paymentMethod !== 'Tunai' ? bukti.mimeType : undefined,
         items: items.map((item) => ({
           id_menu: item.id,
           jumlah_pesanan: item.quantity,
         })),
       };
 
-      const res = await API.post('/pesanan', orderPayload);
+      const res = await API.post('/pesanan', orderPayload, { timeout: 30000 });
 
       if (res.data.success) {
+        // Simpan data pesanan sebelum keranjang dikosongkan
+        const snapshot = {
+          id: res.data.data.id_pesanan,
+          stan: activeTenant?.nama_tenant || '-',
+          total: res.data.data.total_harga ?? totalAmount,
+          metode: paymentMethod,
+          statusBayar:
+            res.data.data.status_pembayaran ||
+            (paymentMethod === 'Tunai' ? 'Belum Dibayar' : 'Sudah Dibayar'),
+        };
         clearCart();
-        Alert.alert(
-          'Pre-Order Berhasil Dibuat! 🎉',
-          paymentMethod === 'Tunai'
-            ? `Pesanan #${res.data.data.id_pesanan} telah diteruskan ke stan ${activeTenant?.nama_tenant}.\n\nStatus pembayaran: Belum Dibayar. Silakan bayar tunai saat mengambil pesanan.`
-            : `Pesanan #${res.data.data.id_pesanan} telah diteruskan ke stan ${activeTenant?.nama_tenant}.\n\nStatus pembayaran: Sudah Dibayar. Pesanan Anda segera diproses!`,
-          [
-            {
-              text: 'Lihat Status Pesanan',
-              onPress: () => navigation.replace('MahasiswaMain', { initialTab: 'pesanan' }),
-            },
-          ]
-        );
+        setSuccessOrder(snapshot);
       } else {
         Alert.alert('Gagal Memesan', res.data.message || 'Terjadi kesalahan.');
       }
@@ -173,6 +199,78 @@ export default function CartCheckoutScreen({ navigation }) {
       setSubmitting(false);
     }
   };
+
+  const goToOrders = () => {
+    setSuccessOrder(null);
+    navigation.replace('MahasiswaMain', { initialTab: 'pesanan' });
+  };
+
+  const payKind =
+    successOrder?.statusBayar === 'Sudah Dibayar'
+      ? 'paid'
+      : successOrder?.statusBayar === 'Menunggu Verifikasi'
+      ? 'verifying'
+      : 'unpaid';
+  const pillColor =
+    payKind === 'paid' ? COLORS.textSuccessDark : payKind === 'verifying' ? COLORS.brownDark : COLORS.dangerDark;
+  const pillIcon =
+    payKind === 'paid' ? 'checkmark-circle' : payKind === 'verifying' ? 'hourglass-outline' : 'time-outline';
+
+  const successModal = (
+    <Modal
+      visible={!!successOrder}
+      transparent
+      animationType="fade"
+      onRequestClose={goToOrders}
+    >
+      <View style={styles.successOverlay}>
+        <View style={styles.successCard}>
+          <View style={styles.successIconRing}>
+            <View style={styles.successIconCircle}>
+              <Ionicons name="checkmark" size={44} color="#FFFFFF" />
+            </View>
+          </View>
+
+          <Text style={styles.successTitle}>Pre-Order Berhasil!</Text>
+          <Text style={styles.successSubtitle}>
+            {successOrder?.metode === 'Tunai'
+              ? 'Silakan bayar tunai saat mengambil pesanan di stan.'
+              : 'Bukti pembayaran Anda sedang diverifikasi oleh stan. Pesanan dimasak setelah pembayaran terverifikasi.'}
+          </Text>
+
+          {successOrder && (
+            <View style={styles.successSummary}>
+              <SummaryRow label="No. Pesanan" value={`#${successOrder.id}`} />
+              <SummaryRow label="Stan" value={successOrder.stan} />
+              <SummaryRow label="Total" value={formatIDR(successOrder.total)} />
+              <SummaryRow label="Metode" value={successOrder.metode} />
+              <SummaryRow label="Status Bayar" last>
+                <View
+                  style={[
+                    styles.statusPill,
+                    payKind === 'paid'
+                      ? styles.statusPillPaid
+                      : payKind === 'verifying'
+                      ? styles.statusPillVerifying
+                      : styles.statusPillUnpaid,
+                  ]}
+                >
+                  <Ionicons name={pillIcon} size={13} color={pillColor} />
+                  <Text style={[styles.statusPillText, { color: pillColor }]}>
+                    {successOrder.statusBayar}
+                  </Text>
+                </View>
+              </SummaryRow>
+            </View>
+          )}
+
+          <TouchableOpacity style={styles.successButton} onPress={goToOrders} activeOpacity={0.85}>
+            <Text style={styles.successButtonText}>Lihat Status Pesanan</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
 
   if (items.length === 0) {
     return (
@@ -189,23 +287,28 @@ export default function CartCheckoutScreen({ navigation }) {
         >
           <Text style={styles.browseButtonText}>Lihat Menu Makanan</Text>
         </TouchableOpacity>
+        {successModal}
       </View>
     );
   }
 
-  const paidAction = paidConfirmed ? (
-    <View style={styles.proofBadge}>
-      <Ionicons name="checkmark-circle" size={14} color={COLORS.textSuccessDark} />
-      <Text style={styles.proofBadgeText}>Pembayaran Diterima (Simulasi)</Text>
+  const buktiAction = bukti ? (
+    <View style={styles.buktiBox}>
+      <Image source={{ uri: bukti.uri }} style={styles.buktiThumb} />
+      <View style={{ flex: 1 }}>
+        <View style={styles.proofBadge}>
+          <Ionicons name="checkmark-circle" size={14} color={COLORS.textSuccessDark} />
+          <Text style={styles.proofBadgeText}>Bukti Terlampir</Text>
+        </View>
+        <TouchableOpacity onPress={pickBukti} activeOpacity={0.7}>
+          <Text style={styles.buktiChange}>Ganti Gambar</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   ) : (
-    <TouchableOpacity
-      style={styles.paidButton}
-      onPress={() => setPaidConfirmed(true)}
-      activeOpacity={0.85}
-    >
-      <Ionicons name="checkmark-done" size={16} color={COLORS.cardBackground} />
-      <Text style={styles.paidButtonText}>Saya Sudah Bayar</Text>
+    <TouchableOpacity style={styles.paidButton} onPress={pickBukti} activeOpacity={0.85}>
+      <Ionicons name="cloud-upload-outline" size={16} color={COLORS.cardBackground} />
+      <Text style={styles.paidButtonText}>Unggah Bukti Pembayaran</Text>
     </TouchableOpacity>
   );
 
@@ -407,10 +510,9 @@ export default function CartCheckoutScreen({ navigation }) {
               </View>
               <Text style={styles.payAmount}>{formatIDR(totalAmount)}</Text>
               <Text style={styles.qrisDesc}>
-                Buka aplikasi bank atau e-wallet, scan kode di atas, lalu tekan tombol di bawah
-                setelah pembayaran berhasil.
+                Buka aplikasi bank atau e-wallet, scan kode di atas, lalu unggah screenshot bukti pembayaran di bawah.
               </Text>
-              {paidAction}
+              {buktiAction}
             </View>
           )}
 
@@ -436,10 +538,9 @@ export default function CartCheckoutScreen({ navigation }) {
               </Text>
               <Text style={styles.payAmount}>{formatIDR(totalAmount)}</Text>
               <Text style={styles.qrisDesc}>
-                Transfer sesuai total tagihan ke salah satu nomor di atas, lalu tekan tombol di
-                bawah setelah pembayaran berhasil.
+                Transfer sesuai total tagihan ke salah satu nomor di atas, lalu unggah screenshot bukti pembayaran di bawah.
               </Text>
-              {paidAction}
+              {buktiAction}
             </View>
           )}
 
@@ -505,6 +606,7 @@ export default function CartCheckoutScreen({ navigation }) {
           )}
         </TouchableOpacity>
       </View>
+      {successModal}
     </View>
   );
 }
@@ -919,5 +1021,140 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: COLORS.dangerDark,
+  },
+  buktiBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    marginTop: SPACING.md,
+  },
+  buktiThumb: {
+    width: 64,
+    height: 64,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.inactiveTab,
+  },
+  buktiChange: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primaryDark,
+    marginTop: 6,
+    textDecorationLine: 'underline',
+  },
+  successOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(26, 28, 25, 0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.xl,
+  },
+  successCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: 24,
+    paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.xxl,
+    paddingBottom: SPACING.xl,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  successIconRing: {
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    backgroundColor: COLORS.badgeSuccess,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.lg,
+  },
+  successIconCircle: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: COLORS.primaryDark,
+    textAlign: 'center',
+  },
+  successSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: COLORS.textBody,
+    textAlign: 'center',
+    marginTop: 6,
+    marginBottom: SPACING.lg,
+  },
+  successSummary: {
+    width: '100%',
+    backgroundColor: COLORS.inputBackground,
+    borderRadius: 16,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    gap: SPACING.md,
+  },
+  summaryRowDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.divider,
+  },
+  summaryLabel: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+  },
+  summaryValue: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    textAlign: 'right',
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  statusPillPaid: {
+    backgroundColor: COLORS.badgeSuccess,
+  },
+  statusPillVerifying: {
+    backgroundColor: COLORS.statusWaitingBg,
+  },
+  statusPillUnpaid: {
+    backgroundColor: COLORS.dangerBg,
+  },
+  statusPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  successButton: {
+    width: '100%',
+    backgroundColor: COLORS.primary,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: SPACING.lg,
+  },
+  successButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });
