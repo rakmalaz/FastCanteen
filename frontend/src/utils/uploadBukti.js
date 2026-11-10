@@ -15,7 +15,9 @@ export async function pilihDanUnggahBukti(idPesanan) {
   if (!asset || !asset.base64) {
     throw new Error('Gambar tidak dapat dibaca. Silakan pilih gambar lain.');
   }
-
+  if (asset.base64.length * 0.75 > 4.5 * 1024 * 1024) {
+    throw new Error('Ukuran gambar terlalu besar (maksimal 5 MB). Pilih gambar lain atau gunakan screenshot.');
+  }
   const res = await API.put(
     `/pesanan/${idPesanan}/bukti`,
     { bukti_base64: asset.base64, bukti_mime: asset.mimeType || 'image/jpeg' },

@@ -59,7 +59,7 @@ export default function SuperAdminDashboardScreen({ navigation }) {
         setTenantsList(tenantsRes.data.data);
       }
       if (ordersRes.data.success) {
-        setOrdersList(ordersRes.data.data);
+         setOrdersList(ordersRes.data.data.map((o) => ({ ...o, status: o.status_pesanan })));
       }
       if (studentsRes.data.success) {
         setStudentsList(studentsRes.data.data);
@@ -131,7 +131,7 @@ export default function SuperAdminDashboardScreen({ navigation }) {
   const handleDeleteTenant = (tenant) => {
     Alert.alert(
       'Konfirmasi Hapus Tenant',
-      `Yakin ingin menghapus "${tenant.nama_tenant}" dari sistem FastCanteen? Semua menu terkait akan ikut dihapus.`,
+      `Yakin ingin menghapus "${tenant.nama_tenant}" dari sistem FastCanteen? Semua menu, pesanan, riwayat, notifikasi, dan akun pemilik stan ini akan ikut dihapus permanen.`,
       [
         { text: 'Batal', style: 'cancel' },
         {

@@ -31,7 +31,7 @@ const ALASAN_TOLAK = [
 
 export default function TenantDashboardScreen({ navigation }) {
   const { user, logout } = useAuth();
-  const tenantId = user?.tenant?.id || 1;
+  const tenantId = user?.tenant?.id ?? (user?.peran === 'admin' ? 1 : undefined);
   const tenantName = user?.tenant?.nama_tenant || 'Stan Kantin UINSA';
   const tenantLocation =
     user?.tenant?.lokasi_stan || 'Kantin Belakang Lt. 1 UINSA Kampus 2';
@@ -71,7 +71,12 @@ export default function TenantDashboardScreen({ navigation }) {
   const [notifMessage, setNotifMessage] = useState('');
   const [sendingNotif, setSendingNotif] = useState(false);
 
-  const fetchData = async () => {
+    const fetchData = async () => {
+    if (!tenantId) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     try {
       const [orderRes, summaryRes, menuRes] = await Promise.all([
         API.get(`/pesanan/tenant/${tenantId}`),
@@ -96,8 +101,10 @@ export default function TenantDashboardScreen({ navigation }) {
     }
   };
 
-  useEffect(() => {
+    useEffect(() => {
     fetchData();
+    const timer = setInterval(fetchData, 10000);
+    return () => clearInterval(timer);
   }, [tenantId]);
 
   const onRefresh = useCallback(() => {
@@ -182,14 +189,16 @@ export default function TenantDashboardScreen({ navigation }) {
         fetchData();
       }
     } catch (err) {
-      Alert.alert('Gagal', err.message);
+      Alert.alert('Gagal', err.response?.data?.message || err.message);
     }
   };
 
   // Tambah Menu Baru (US-09)
   const handleCreateMenu = async () => {
-    if (!newMenuNama.trim() || !newMenuHarga.trim()) {
-      Alert.alert('Perhatian', 'Nama menu dan harga wajib diisi.');
+    // Ambil hanya angka: "15.000" atau "15,000" menjadi 15000
+    const hargaAngka = Number(newMenuHarga.replace(/[^0-9]/g, ''));
+    if (!newMenuNama.trim() || !hargaAngka) {
+      Alert.alert('Perhatian', 'Nama menu dan harga (angka lebih dari 0) wajib diisi.');
       return;
     }
 
@@ -198,7 +207,7 @@ export default function TenantDashboardScreen({ navigation }) {
       const payload = {
         id_tenant: tenantId,
         nama_menu: newMenuNama.trim(),
-        harga: parseFloat(newMenuHarga),
+        harga: hargaAngka,
         foto:
           newMenuFoto.trim() ||
           'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop&q=60',
@@ -215,7 +224,7 @@ export default function TenantDashboardScreen({ navigation }) {
         fetchData();
       }
     } catch (err) {
-      Alert.alert('Gagal Menyimpan Menu', err.message);
+      Alert.alert('Gagal Menyimpan Menu', err.response?.data?.message || err.message);
     } finally {
       setSubmittingMenu(false);
     }
@@ -377,7 +386,7 @@ export default function TenantDashboardScreen({ navigation }) {
         <View style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>Perlu Dimasak</Text>
           <Text style={[styles.summaryValue, { color: COLORS.queueOrange }]}>
-            {summary?.statistik?.antrean_diproses || 0} Antrean
+            {summary?.statistik?.perlu_dimasak || 0} Antrean
           </Text>
         </View>
 
@@ -437,36 +446,36 @@ export default function TenantDashboardScreen({ navigation }) {
         <>
           {/* Sub-Filter Status */}
           <View style={styles.statusFilterWrap}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={[styles.statusFilterRow, { alignItems: 'center', marginTop: 0 }]}
-          >
-            {['Semua', 'Perlu Verifikasi', 'Menunggu', 'Diproses', 'Siap Diambil', 'Selesai'].map((st) => {
-              const isSelected = statusFilter === st;
-              return (
-                <TouchableOpacity
-                  key={st}
-                  style={[
-                    styles.statusChip,
-                    isSelected && styles.statusChipActive,
-                  ]}
-                  onPress={() => setStatusFilter(st)}
-                >
-                  <Text
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={[styles.statusFilterRow, { alignItems: 'center', marginTop: 0 }]}
+            >
+              {['Semua', 'Perlu Verifikasi', 'Menunggu', 'Diproses', 'Siap Diambil', 'Selesai'].map((st) => {
+                const isSelected = statusFilter === st;
+                return (
+                  <TouchableOpacity
+                    key={st}
                     style={[
-                      styles.statusChipText,
-                      isSelected && styles.statusChipTextActive,
+                      styles.statusChip,
+                      isSelected && styles.statusChipActive,
                     ]}
+                    onPress={() => setStatusFilter(st)}
                   >
-                    {st === 'Perlu Verifikasi' && jumlahPerluVerifikasi > 0
-                      ? `Perlu Verifikasi (${jumlahPerluVerifikasi})`
-                      : st}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+                    <Text
+                      style={[
+                        styles.statusChipText,
+                        isSelected && styles.statusChipTextActive,
+                      ]}
+                    >
+                      {st === 'Perlu Verifikasi' && jumlahPerluVerifikasi > 0
+                        ? `Perlu Verifikasi (${jumlahPerluVerifikasi})`
+                        : st}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
 
           {loading ? (
@@ -709,32 +718,32 @@ export default function TenantDashboardScreen({ navigation }) {
                       {isMenunggu && (
                         <>
                           {!terkunci && (
-                          <TouchableOpacity
-                            style={styles.processButton}
-                            onPress={() => handleUpdateStatus(item.id, 'Diproses')}
-                            activeOpacity={0.8}
-                          >
-                            <Ionicons name="flame" size={15} color={COLORS.cardBackground} />
-                            <Text style={styles.readyButtonText}>Terima & Masak</Text>
-                          </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.processButton}
+                              onPress={() => handleUpdateStatus(item.id, 'Diproses')}
+                              activeOpacity={0.8}
+                            >
+                              <Ionicons name="flame" size={15} color={COLORS.cardBackground} />
+                              <Text style={styles.readyButtonText}>Terima & Masak</Text>
+                            </TouchableOpacity>
                           )}
                           {!(menungguVerif || buktiDitolak) && (
-                          <TouchableOpacity
-                            style={styles.cancelOrderBtn}
-                            onPress={() =>
-                              Alert.alert('Tolak Pesanan', `Tolak pesanan #${item.id}?`, [
-                                { text: 'Batal', style: 'cancel' },
-                                {
-                                  text: 'Tolak',
-                                  style: 'destructive',
-                                  onPress: () => handleUpdateStatus(item.id, 'Dibatalkan'),
-                                },
-                              ])
-                            }
-                            activeOpacity={0.8}
-                          >
-                            <Ionicons name="close" size={15} color={COLORS.danger} />
-                          </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.cancelOrderBtn}
+                              onPress={() =>
+                                Alert.alert('Tolak Pesanan', `Tolak pesanan #${item.id}?`, [
+                                  { text: 'Batal', style: 'cancel' },
+                                  {
+                                    text: 'Tolak',
+                                    style: 'destructive',
+                                    onPress: () => handleUpdateStatus(item.id, 'Dibatalkan'),
+                                  },
+                                ])
+                              }
+                              activeOpacity={0.8}
+                            >
+                              <Ionicons name="close" size={15} color={COLORS.danger} />
+                            </TouchableOpacity>
                           )}
                         </>
                       )}
@@ -878,7 +887,7 @@ export default function TenantDashboardScreen({ navigation }) {
                   placeholder="Contoh: 15000"
                   placeholderTextColor={COLORS.textSecondary}
                   value={newMenuHarga}
-                  onChangeText={setNewMenuHarga}
+                  onChangeText={(teks) => setNewMenuHarga(teks.replace(/[^0-9]/g, ''))}
                   keyboardType="numeric"
                 />
               </View>

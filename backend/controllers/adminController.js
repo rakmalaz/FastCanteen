@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const db = require('../config/db');
 
 // Daftar 4 Super Admin Resmi FastCanteen UINSA Sunan Ampel Kampus 2
@@ -55,7 +57,7 @@ exports.getOverview = async (req, res) => {
         const [orderStats] = await db.query(`
             SELECT 
                 COUNT(*) as total_pesanan,
-                COALESCE(SUM(total_harga), 0) as total_omzet,
+                COALESCE(SUM(CASE WHEN status_pesanan <> 'Dibatalkan' AND status_pembayaran NOT IN ('Menunggu Verifikasi', 'Bukti Ditolak') THEN total_harga ELSE 0 END), 0) as total_omzet,
                 SUM(CASE WHEN status_pesanan = 'Menunggu' THEN 1 ELSE 0 END) as menunggu,
                 SUM(CASE WHEN status_pesanan = 'Diproses' THEN 1 ELSE 0 END) as diproses,
                 SUM(CASE WHEN status_pesanan = 'Siap Diambil' THEN 1 ELSE 0 END) as siap_diambil,
@@ -107,17 +109,17 @@ exports.getOverview = async (req, res) => {
 // Mengambil seluruh Tenant dengan data analitik per stan
 exports.getTenants = async (req, res) => {
     try {
-        const query = `
+                const query = `
             SELECT t.id, t.nama_tenant, t.lokasi_stan, t.id_admin_pendaftar,
-                   p.nama as nama_pemilik, p.email as email_pemilik, p.no_hp as no_hp_pemilik,
-                   COUNT(DISTINCT m.id) as total_menu,
-                   COUNT(DISTINCT ps.id) as total_pesanan,
-                   COALESCE(SUM(ps.total_harga), 0) as total_pendapatan
+                   p.nama AS nama_pemilik, p.email AS email_pemilik, p.no_hp AS no_hp_pemilik,
+                   (SELECT COUNT(*) FROM menu m WHERE m.id_tenant = t.id) AS total_menu,
+                   (SELECT COUNT(*) FROM pesanan ps WHERE ps.id_tenant = t.id) AS total_pesanan,
+                   (SELECT COALESCE(SUM(ps.total_harga), 0) FROM pesanan ps
+                     WHERE ps.id_tenant = t.id
+                       AND ps.status_pesanan <> 'Dibatalkan'
+                       AND ps.status_pembayaran NOT IN ('Menunggu Verifikasi', 'Bukti Ditolak')) AS total_pendapatan
             FROM tenant t
             LEFT JOIN pengguna p ON t.id_admin_pendaftar = p.id
-            LEFT JOIN menu m ON t.id = m.id_tenant
-            LEFT JOIN pesanan ps ON t.id = ps.id_tenant
-            GROUP BY t.id, t.nama_tenant, t.lokasi_stan, t.id_admin_pendaftar, p.nama, p.email, p.no_hp
             ORDER BY t.id ASC
         `;
         const [rows] = await db.query(query);
@@ -165,19 +167,31 @@ exports.registerTenant = async (req, res) => {
             });
         }
 
-        // 1. Buat akun pengguna peran tenant
-        const [userResult] = await db.query(
-            'INSERT INTO pengguna (nama, email, kata_sandi, peran, no_hp) VALUES (?, ?, ?, ?, ?)',
-            [nama_pemilik, email, kata_sandi, 'tenant', no_hp || null]
-        );
-        const newUserId = userResult.insertId;
+                // Dua INSERT dibungkus transaksi: jika salah satu gagal, keduanya dibatalkan
+        const conn = await db.getConnection();
+        let newUserId, newTenantId;
+        try {
+            await conn.beginTransaction();
 
-        // 2. Buat data tenant
-        const [tenantResult] = await db.query(
-            'INSERT INTO tenant (nama_tenant, lokasi_stan, id_admin_pendaftar) VALUES (?, ?, ?)',
-            [nama_tenant, lokasi_stan, newUserId]
-        );
-        const newTenantId = tenantResult.insertId;
+            const [userResult] = await conn.query(
+                'INSERT INTO pengguna (nama, email, kata_sandi, peran, no_hp) VALUES (?, ?, ?, ?, ?)',
+                [nama_pemilik, email, kata_sandi, 'tenant', no_hp || null]
+            );
+            newUserId = userResult.insertId;
+
+            const [tenantResult] = await conn.query(
+                'INSERT INTO tenant (nama_tenant, lokasi_stan, id_admin_pendaftar) VALUES (?, ?, ?)',
+                [nama_tenant, lokasi_stan, newUserId]
+            );
+            newTenantId = tenantResult.insertId;
+
+            await conn.commit();
+        } catch (txErr) {
+            await conn.rollback();
+            throw txErr;
+        } finally {
+            conn.release();
+        }
 
         res.status(201).json({
             success: true,
@@ -221,8 +235,19 @@ exports.deleteTenant = async (req, res) => {
 
         const tenant = tenants[0];
 
-        // Hapus tenant (foreign keys akan menghapus pesanan & menu secara berantai jika cascade)
+                // Catat file bukti pembayaran milik stan ini sebelum datanya terhapus
+        const [fileBukti] = await db.query(
+            'SELECT bukti_pembayaran FROM pesanan WHERE id_tenant = ? AND bukti_pembayaran IS NOT NULL',
+            [id]
+        );
+
         await db.query('DELETE FROM tenant WHERE id = ?', [id]);
+
+        // Hapus file bukti dari folder uploads (gagal hapus file tidak menggagalkan proses)
+        for (const row of fileBukti) {
+            const namaFile = path.basename(String(row.bukti_pembayaran));
+            fs.promises.unlink(path.join(__dirname, '..', 'uploads', namaFile)).catch(() => {});
+        }
 
         // Hapus akun pengguna jika ada
         if (tenant.id_admin_pendaftar) {

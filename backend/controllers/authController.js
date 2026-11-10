@@ -37,11 +37,18 @@ exports.register = async (req, res) => {
                 message: 'Email sudah terdaftar. Silakan gunakan email lain atau masuk.'
             });
         }
-
+        // Cek NIM apakah sudah terdaftar (login bisa memakai NIM, jadi harus unik)
+        const [nimAda] = await db.query('SELECT id FROM pengguna WHERE nim = ?', [nim.trim()]);
+        if (nimAda.length > 0) {
+            return res.status(409).json({
+                success: false,
+                message: 'NIM sudah terdaftar. Silakan masuk atau hubungi admin jika ini bukan Anda.'
+            });
+        }
         // Simpan akun mahasiswa
         const [resultUser] = await db.query(
             'INSERT INTO pengguna (nama, nim, email, kata_sandi, peran, no_hp) VALUES (?, ?, ?, ?, ?, ?)',
-            [nama, nim, email, kata_sandi, 'mahasiswa', no_hp || null]
+            [nama, nim.trim(), email, kata_sandi, 'mahasiswa', no_hp || null]
         );
 
         const newUserId = resultUser.insertId;

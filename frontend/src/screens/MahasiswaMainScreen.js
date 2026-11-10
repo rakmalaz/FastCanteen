@@ -297,7 +297,7 @@ export default function MahasiswaMainScreen({ navigation, route }) {
       Alert.alert('Info', `Nomor kontak untuk ${tenantName} belum tersedia.`);
       return;
     }
-    const cleanPhone = phone.replace(/^0/, '62');
+        const cleanPhone = phone.replace(/\D/g, '').replace(/^0/, '62'); 
     const url = `https://wa.me/${cleanPhone}?text=Halo%20${encodeURIComponent(
       tenantName
     )},%20saya%20ingin%20menanyakan%20pesanan%20FastCanteen%20saya`;

@@ -9,6 +9,7 @@ const path = require('path');
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 const MIME_EXT = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 const MAX_BUKTI_BYTES = 5 * 1024 * 1024; // 5 MB
+const METODE_VALID = ['QRIS', 'E-Wallet', 'Tunai'];
 
 const errorBukti = (message) => {
     const err = new Error(message);
@@ -58,7 +59,12 @@ exports.createPesanan = async (req, res) => {
                 message: 'Mahasiswa, tenant, dan metode pembayaran wajib diisi'
             });
         }
-
+        if (!METODE_VALID.includes(metode_pembayaran)) {
+            return res.status(400).json({
+                success: false,
+                message: `Metode pembayaran harus salah satu dari: ${METODE_VALID.join(', ')}`
+            });
+        }
         if (!items || !Array.isArray(items) || items.length === 0) {
             return res.status(400).json({
                 success: false,
@@ -106,7 +112,7 @@ exports.createPesanan = async (req, res) => {
 
         for (const item of items) {
             const [menuRows] = await connection.query(
-                'SELECT id, nama_menu, harga, status_tersedia FROM menu WHERE id = ?',
+                'SELECT id, id_tenant, nama_menu, harga, status_tersedia FROM menu WHERE id = ?',
                 [item.id_menu]
             );
 
@@ -119,6 +125,13 @@ exports.createPesanan = async (req, res) => {
             }
 
             const menu = menuRows[0];
+            if (menu.id_tenant !== Number(id_tenant)) {
+                await connection.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: `Menu "${menu.nama_menu}" bukan milik stan ini`
+                });
+            }
             if (menu.status_tersedia === 'habis') {
                 await connection.rollback();
                 return res.status(400).json({
@@ -127,7 +140,14 @@ exports.createPesanan = async (req, res) => {
                 });
             }
 
-            const jumlah = parseInt(item.jumlah_pesanan, 10) || 1;
+            const jumlah = Number(item.jumlah_pesanan);
+            if (!Number.isInteger(jumlah) || jumlah < 1 || jumlah > 50) {
+                await connection.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: 'Jumlah pesanan harus bilangan bulat 1 sampai 50'
+                });
+            }
             const subHarga = parseFloat(menu.harga) * jumlah;
             totalHarga += subHarga;
 
@@ -257,10 +277,11 @@ exports.getPesananByMahasiswa = async (req, res) => {
         const { filter } = req.query;
 
         let query = `
-            SELECT p.*, t.nama_tenant, t.lokasi_stan,
+                        SELECT p.*, t.nama_tenant, t.lokasi_stan, own.no_hp AS no_hp_tenant,
                    m.nama as nama_mahasiswa, m.nim, m.no_hp as no_hp_mahasiswa
             FROM pesanan p
             JOIN tenant t ON p.id_tenant = t.id
+            LEFT JOIN pengguna own ON t.id_admin_pendaftar = own.id
             JOIN pengguna m ON p.id_mahasiswa = m.id
             WHERE p.id_mahasiswa = ?
         `;
@@ -272,7 +293,7 @@ exports.getPesananByMahasiswa = async (req, res) => {
             query += " AND p.status_pesanan IN ('Selesai', 'Dibatalkan')";
         }
 
-        query += " ORDER BY (p.status_pembayaran = 'Menunggu Verifikasi' AND p.status_pesanan = 'Menunggu') DESC, p.id DESC";
+        query += ' ORDER BY p.id DESC';
 
         const [pesananRows] = await db.query(query, params);
 
@@ -329,13 +350,13 @@ exports.getPesananByTenant = async (req, res) => {
             query += ' AND p.status_pesanan = ?';
             params.push(statusPesanan);
         }
-
+        
         if (status_pembayaran) {
             query += ' AND p.status_pembayaran = ?';
             params.push(status_pembayaran);
         }
 
-        query += ' ORDER BY p.id DESC';
+        query += " ORDER BY (p.status_pembayaran = 'Menunggu Verifikasi' AND p.status_pesanan = 'Menunggu') DESC, p.id DESC";
 
         const [pesananRows] = await db.query(query, params);
 
@@ -452,9 +473,31 @@ exports.updateStatusPesanan = async (req, res) => {
             });
         }
 
+        // Alur status yang diperbolehkan (tidak boleh mundur atau loncat)
+        const ALUR_STATUS = {
+            'Menunggu': ['Diproses', 'Dibatalkan'],
+            'Diproses': ['Siap Diambil', 'Dibatalkan'],
+            'Siap Diambil': ['Selesai', 'Dibatalkan'],
+            'Selesai': [],
+            'Dibatalkan': []
+        };
+        if (!(ALUR_STATUS[cek.status_pesanan] || []).includes(status)) {
+            return res.status(409).json({
+                success: false,
+                message: `Status pesanan tidak bisa diubah dari "${cek.status_pesanan}" ke "${status}"`
+            });
+        }
+
+        // Pesanan Tunai otomatis menjadi 'Sudah Dibayar' saat Selesai (uang diterima di stan)
         const [result] = await db.query(
-            'UPDATE pesanan SET status_pesanan = ?, waktu_perubahan_status = NOW() WHERE id = ?',
-            [status, id]
+            `UPDATE pesanan
+             SET status_pesanan = ?,
+                 status_pembayaran = CASE
+                     WHEN ? = 'Selesai' AND metode_pembayaran = 'Tunai' AND status_pembayaran = 'Belum Dibayar'
+                     THEN 'Sudah Dibayar' ELSE status_pembayaran END,
+                 waktu_perubahan_status = NOW()
+             WHERE id = ?`,
+            [status, status, id]
         );
 
         if (result.affectedRows === 0) {
@@ -554,6 +597,28 @@ exports.updateStatusPembayaran = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: `Status pembayaran harus salah satu dari: ${validStatus.join(', ')}`
+            });
+        }
+
+        // Batasi perubahan manual agar QRIS/E-Wallet tidak lolos tanpa verifikasi bukti
+        const [cekBayar] = await db.query(
+            'SELECT metode_pembayaran, status_pembayaran FROM pesanan WHERE id = ?',
+            [id]
+        );
+        if (cekBayar.length === 0) {
+            return res.status(404).json({ success: false, message: 'Pesanan tidak ditemukan' });
+        }
+        const bayarSaatIni = cekBayar[0];
+        const boleh =
+            (status_pembayaran === 'Sudah Dibayar' &&
+                bayarSaatIni.metode_pembayaran === 'Tunai' &&
+                bayarSaatIni.status_pembayaran === 'Belum Dibayar') ||
+            (status_pembayaran === 'Dikembalikan' &&
+                bayarSaatIni.status_pembayaran === 'Sudah Dibayar');
+        if (!boleh) {
+            return res.status(409).json({
+                success: false,
+                message: `Status pembayaran tidak bisa diubah dari "${bayarSaatIni.status_pembayaran}" ke "${status_pembayaran}"`
             });
         }
 
@@ -726,13 +791,25 @@ exports.verifikasiPembayaran = async (req, res) => {
                 message: 'Pesanan ini tidak sedang menunggu verifikasi pembayaran'
             });
         }
-
+        // Semua UPDATE di bawah hanya berlaku jika pesanan MASIH menunggu verifikasi.
+        // Jika perangkat lain sudah memprosesnya lebih dulu, tidak ada yang berubah.
+        const terapkan = async (sql, params) => {
+            const [hasilUpdate] = await db.query(
+                sql + " AND status_pembayaran = 'Menunggu Verifikasi' AND status_pesanan = 'Menunggu'",
+                params
+            );
+            if (hasilUpdate.affectedRows === 0) {
+                const e = new Error('Pesanan ini sudah diverifikasi dari perangkat lain');
+                e.konflik = true;
+                throw e;
+            }
+        };
         const alasan = (catatan || '').toString().trim().slice(0, 255) || null;
         const verifikator = id_verifikator || order.id_admin_pendaftar || null;
         let judul, pesan, tipe = 'info', hasil;
 
         if (aksi === 'valid') {
-            await db.query(
+            await terapkan(
                 `UPDATE pesanan
                  SET status_pembayaran = 'Sudah Dibayar', catatan_verifikasi = NULL,
                      diverifikasi_oleh = ?, waktu_verifikasi = NOW(), waktu_perubahan_status = NOW()
@@ -745,7 +822,7 @@ exports.verifikasiPembayaran = async (req, res) => {
         } else if (aksi === 'minta_ulang') {
             const jumlah = (order.jumlah_penolakan || 0) + 1;
             if (jumlah >= BATAS_PENOLAKAN) {
-                await db.query(
+                await terapkan(
                     `UPDATE pesanan
                      SET status_pembayaran = 'Bukti Ditolak', status_pesanan = 'Dibatalkan',
                          jumlah_penolakan = ?, catatan_verifikasi = ?,
@@ -758,7 +835,7 @@ exports.verifikasiPembayaran = async (req, res) => {
                 tipe = 'dibatalkan';
                 pesan = `Bukti pembayaran pesanan #${id} ditolak ${BATAS_PENOLAKAN} kali sehingga pesanan dibatalkan.${alasan ? ` Alasan terakhir: ${alasan}` : ''}`;
             } else {
-                await db.query(
+                await terapkan(
                     `UPDATE pesanan
                      SET status_pembayaran = 'Bukti Ditolak', jumlah_penolakan = ?, catatan_verifikasi = ?,
                          diverifikasi_oleh = ?, waktu_verifikasi = NOW(), waktu_perubahan_status = NOW()
@@ -770,7 +847,7 @@ exports.verifikasiPembayaran = async (req, res) => {
                 pesan = `Bukti pembayaran pesanan #${id} ditolak${alasan ? `: ${alasan}` : '.'} Silakan unggah ulang bukti yang benar (kesempatan ke-${jumlah} dari ${BATAS_PENOLAKAN}).`;
             }
         } else {
-            await db.query(
+            await terapkan(
                 `UPDATE pesanan
                  SET status_pembayaran = 'Bukti Ditolak', status_pesanan = 'Dibatalkan',
                      jumlah_penolakan = jumlah_penolakan + 1, catatan_verifikasi = ?,
@@ -801,6 +878,9 @@ exports.verifikasiPembayaran = async (req, res) => {
             data: updated[0]
         });
     } catch (error) {
+        if (error.konflik) {
+            return res.status(409).json({ success: false, message: error.message });
+        }
         console.error('Error saat verifikasi pembayaran:', error);
         res.status(500).json({
             success: false,
@@ -860,8 +940,8 @@ exports.getTenantSummary = async (req, res) => {
         const [totalRevenue] = await db.query(
             `SELECT 
                 COUNT(*) as total_pesanan,
-                COALESCE(SUM(CASE WHEN status_pesanan != 'Dibatalkan' AND status_pembayaran NOT IN ('Menunggu Verifikasi', 'Bukti Ditolak') THEN total_harga ELSE 0 END), 0) as total_pendapatan,
-                SUM(CASE WHEN status_pesanan = 'Menunggu' THEN 1 ELSE 0 END) as antrean_menunggu,
+                                COALESCE(SUM(CASE WHEN status_pesanan != 'Dibatalkan' AND status_pembayaran = 'Sudah Dibayar' THEN total_harga ELSE 0 END), 0) as total_pendapatan,
+                SUM(CASE WHEN status_pesanan = 'Menunggu' AND (metode_pembayaran = 'Tunai' OR status_pembayaran = 'Sudah Dibayar') THEN 1 ELSE 0 END) as perlu_dimasak,
                 SUM(CASE WHEN status_pesanan = 'Diproses' THEN 1 ELSE 0 END) as antrean_diproses,
                 SUM(CASE WHEN status_pesanan = 'Siap Diambil' THEN 1 ELSE 0 END) as siap_diambil,
                 SUM(CASE WHEN status_pesanan = 'Selesai' THEN 1 ELSE 0 END) as order_selesai,

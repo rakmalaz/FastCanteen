@@ -125,6 +125,10 @@ export default function CartCheckoutScreen({ navigation }) {
         Alert.alert('Gambar Tidak Terbaca', 'Silakan pilih gambar bukti pembayaran lainnya.');
         return;
       }
+            if (asset.base64.length * 0.75 > 4.5 * 1024 * 1024) {
+        Alert.alert('Gambar Terlalu Besar', 'Ukuran maksimal 5 MB. Pilih gambar lain atau gunakan screenshot.');
+        return;
+      }
       setBukti({ uri: asset.uri, base64: asset.base64, mimeType: asset.mimeType || 'image/jpeg' });
     } catch (err) {
       Alert.alert('Gagal Memilih Gambar', err.message || 'Terjadi kesalahan saat membuka galeri.');

@@ -87,11 +87,23 @@ exports.createMenu = async (req, res) => {
     try {
         const { id_tenant, nama_menu, harga, foto, status_tersedia } = req.body;
 
-        if (!id_tenant || !nama_menu || !harga) {
-            return res.status(400).json({
-                success: false,
-                message: 'ID Tenant, nama menu, dan harga wajib diisi'
-            });
+        const namaBersih = String(nama_menu || '').trim();
+        const hargaAngka = Number(harga);
+
+        if (!id_tenant || !namaBersih || !Number.isFinite(hargaAngka)) {
+            return res.status(400).json({ success: false, message: 'ID Tenant, nama menu, dan harga wajib diisi' });
+        }
+        if (hargaAngka <= 0 || hargaAngka > 1000000) {
+            return res.status(400).json({ success: false, message: 'Harga harus lebih dari 0 dan maksimal Rp 1.000.000' });
+        }
+        if (namaBersih.length > 100) {
+            return res.status(400).json({ success: false, message: 'Nama menu maksimal 100 karakter' });
+        }
+        if (foto && String(foto).length > 255) {
+            return res.status(400).json({ success: false, message: 'Alamat foto maksimal 255 karakter' });
+        }
+        if (status_tersedia && !['tersedia', 'habis'].includes(status_tersedia)) {
+            return res.status(400).json({ success: false, message: "Status menu harus 'tersedia' atau 'habis'" });
         }
 
         // Pastikan tenant ada
@@ -108,7 +120,7 @@ exports.createMenu = async (req, res) => {
 
         const [result] = await db.query(
             'INSERT INTO menu (id_tenant, nama_menu, harga, foto, status_tersedia) VALUES (?, ?, ?, ?, ?)',
-            [id_tenant, nama_menu, parseFloat(harga), fotoUrl, statusTersedia]
+            [id_tenant, namaBersih, hargaAngka, fotoUrl, statusTersedia]
         );
 
         res.status(201).json({
