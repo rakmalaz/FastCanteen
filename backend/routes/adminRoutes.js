@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
+const { wajibLogin, wajibPeran } = require('../middleware/auth');
+
+// Seluruh rute admin hanya untuk Super Admin yang sudah login
+router.use(wajibLogin, wajibPeran('admin'));
 
 // Super Admin Overview & Ringkasan Metrik
 router.get('/overview', adminController.getOverview);

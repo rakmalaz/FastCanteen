@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext } from 'react';
-import API from '../api/axios';
+import API, { setAuthToken } from '../api/axios';
 
 const AuthContext = createContext();
 
@@ -12,6 +12,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await API.post('/auth/login', { email, kata_sandi });
       if (response.data.success) {
+        setAuthToken(response.data.token);
         setUser(response.data.data);
         return { success: true, user: response.data.data };
       }
@@ -30,6 +31,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await API.post('/auth/register', payload);
       if (response.data.success) {
+        setAuthToken(response.data.token);
         setUser(response.data.data);
         return { success: true, user: response.data.data };
       }
@@ -44,6 +46,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
+    setAuthToken(null);
     setUser(null);
   };
 

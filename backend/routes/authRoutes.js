@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
+const { wajibLogin, hanyaDiriSendiri } = require('../middleware/auth');
 
-// US-01, US-02
 router.post('/register', authController.register);
 router.post('/login', authController.login);
-router.get('/profile/:id', authController.getProfile);
+router.get('/profile/:id', wajibLogin, hanyaDiriSendiri('id'), authController.getProfile);
 
 module.exports = router;

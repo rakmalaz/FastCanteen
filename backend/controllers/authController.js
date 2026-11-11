@@ -1,4 +1,6 @@
 const db = require('../config/db');
+const bcrypt = require('bcryptjs');
+const { buatToken } = require('../middleware/auth');
 
 // Registrasi pengguna baru (Mahasiswa, Tenant, atau Admin)
 // US-01, US-02
@@ -48,7 +50,7 @@ exports.register = async (req, res) => {
         // Simpan akun mahasiswa
         const [resultUser] = await db.query(
             'INSERT INTO pengguna (nama, nim, email, kata_sandi, peran, no_hp) VALUES (?, ?, ?, ?, ?, ?)',
-            [nama, nim.trim(), email, kata_sandi, 'mahasiswa', no_hp || null]
+            [nama, nim.trim(), email, await bcrypt.hash(String(kata_sandi).trim(), 10), 'mahasiswa', no_hp || null]
         );
 
         const newUserId = resultUser.insertId;
@@ -56,6 +58,7 @@ exports.register = async (req, res) => {
         res.status(201).json({
             success: true,
             message: 'Registrasi Mahasiswa berhasil',
+            token: buatToken({ id: newUserId, peran: 'mahasiswa' }),
             data: {
                 id: newUserId,
                 nama,
@@ -106,12 +109,22 @@ exports.login = async (req, res) => {
 
         const user = users[0];
 
-        // Validasi kata sandi
-        if (user.kata_sandi !== inputPassword && user.kata_sandi !== kata_sandi) {
+        // Cek kata sandi. Akun lama (teks biasa) otomatis di-hash saat login pertama.
+        const sudahHash = String(user.kata_sandi).startsWith('$2');
+        const cocok = sudahHash
+            ? await bcrypt.compare(inputPassword, user.kata_sandi)
+            : user.kata_sandi === inputPassword || user.kata_sandi === kata_sandi;
+
+        if (!cocok) {
             return res.status(401).json({
                 success: false,
                 message: 'Email/NIM atau kata sandi tidak cocok'
             });
+        }
+
+        if (!sudahHash) {
+            const hashBaru = await bcrypt.hash(inputPassword, 10);
+            await db.query('UPDATE pengguna SET kata_sandi = ? WHERE id = ?', [hashBaru, user.id]);
         }
 
         // Jika pengguna adalah tenant, ambil info tenant miliknya
@@ -123,18 +136,13 @@ exports.login = async (req, res) => {
             );
             if (tenants.length > 0) {
                 tenantInfo = tenants[0];
-            } else {
-                // Fallback jika belum terikat ke stan spesifik, cari stan pertama atau buatkan otomatis
-                const [anyTenant] = await db.query('SELECT * FROM tenant ORDER BY id ASC LIMIT 1');
-                if (anyTenant.length > 0) {
-                    tenantInfo = anyTenant[0];
-                }
             }
         }
 
         res.status(200).json({
             success: true,
             message: 'Login berhasil',
+            token: buatToken(user),
             data: {
                 id: user.id,
                 nama: user.nama,

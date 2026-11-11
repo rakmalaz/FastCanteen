@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const tenantController = require('../controllers/tenantController');
+const { wajibLogin, wajibPeran } = require('../middleware/auth');
 
-// US-01, US-03
-router.get('/', tenantController.getAllTenants);
-router.get('/:id', tenantController.getTenantById);
-router.post('/', tenantController.createTenant);
+router.get('/', wajibLogin, tenantController.getAllTenants);
+router.get('/:id', wajibLogin, tenantController.getTenantById);
+router.post('/', wajibLogin, wajibPeran('admin'), tenantController.createTenant);
 
 module.exports = router;

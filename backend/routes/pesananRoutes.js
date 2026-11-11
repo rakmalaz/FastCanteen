@@ -1,32 +1,36 @@
 const express = require('express');
 const router = express.Router();
 const pesananController = require('../controllers/pesananController');
+const {
+    wajibLogin,
+    wajibPeran,
+    hanyaDiriSendiri,
+    stanSendiri,
+    pesananSendiri,
+    paksaBody,
+} = require('../middleware/auth');
 
-// US-04, US-06: Pre-order Baru
-router.post('/', pesananController.createPesanan);
+// Mahasiswa membuat pesanan (id_mahasiswa selalu diambil dari akun yang login)
+router.post('/', wajibLogin, wajibPeran('mahasiswa'), paksaBody('id_mahasiswa'), pesananController.createPesanan);
 
-// US-10, US-11: Pesanan Mahasiswa (dengan filter: ?filter=aktif | ?filter=riwayat)
-router.get('/mahasiswa/:id_mahasiswa', pesananController.getPesananByMahasiswa);
+// Riwayat pesanan milik mahasiswa yang login
+router.get('/mahasiswa/:id_mahasiswa', wajibLogin, hanyaDiriSendiri('id_mahasiswa'), pesananController.getPesananByMahasiswa);
 
-// US-05: Antrean Pesanan Tenant
-router.get('/tenant/:id_tenant', pesananController.getPesananByTenant);
+// Antrean dan ringkasan milik tenant yang login
+router.get('/tenant/:id_tenant', wajibLogin, wajibPeran('tenant', 'admin'), stanSendiri('params', 'id_tenant'), pesananController.getPesananByTenant);
+router.get('/tenant/:id_tenant/ringkasan', wajibLogin, wajibPeran('tenant', 'admin'), stanSendiri('params', 'id_tenant'), pesananController.getTenantSummary);
 
-// US-13: Ringkasan Laporan Tenant
-router.get('/tenant/:id_tenant/ringkasan', pesananController.getTenantSummary);
+// Detail satu pesanan (mahasiswa pemesan atau tenant pemilik stan)
+router.get('/:id', wajibLogin, pesananSendiri('mahasiswa', 'tenant', 'admin'), pesananController.getPesananById);
 
-// Detail Pesanan berdasarkan ID
-router.get('/:id', pesananController.getPesananById);
+// Tenant mengubah status pesanan dan pembayaran
+router.put('/:id/status', wajibLogin, pesananSendiri('tenant', 'admin'), pesananController.updateStatusPesanan);
+router.put('/:id/status-pembayaran', wajibLogin, pesananSendiri('tenant', 'admin'), pesananController.updateStatusPembayaran);
 
-// US-08: Ubah Status Pesanan ('Menunggu', 'Diproses', 'Siap Diambil', 'Selesai', 'Dibatalkan')
-router.put('/:id/status', pesananController.updateStatusPesanan);
+// Mahasiswa mengunggah ulang bukti pembayaran
+router.put('/:id/bukti', wajibLogin, pesananSendiri('mahasiswa'), pesananController.uploadBuktiPembayaran);
 
-// Ubah Status Pembayaran ('Belum Dibayar', 'Sudah Dibayar', 'Dikembalikan')
-router.put('/:id/status-pembayaran', pesananController.updateStatusPembayaran);
-
-// US-07: Unggah (ulang) Bukti Transaksi - hanya jika bukti sebelumnya ditolak
-router.put('/:id/bukti', pesananController.uploadBuktiPembayaran);
-
-// Verifikasi pembayaran oleh tenant: { aksi: 'valid' | 'minta_ulang' | 'tolak_batal', catatan }
-router.put('/:id/verifikasi', pesananController.verifikasiPembayaran);
+// Tenant memverifikasi pembayaran (id_verifikator = akun yang login)
+router.put('/:id/verifikasi', wajibLogin, pesananSendiri('tenant', 'admin'), paksaBody('id_verifikator'), pesananController.verifikasiPembayaran);
 
 module.exports = router;

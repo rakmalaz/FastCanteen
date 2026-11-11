@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 import Constants from 'expo-constants';
 
 // IP Wi-Fi aktual laptop di jaringan lokal (Wi-Fi)
@@ -57,10 +57,31 @@ API.interceptors.response.use(
       message = error.message;
     }
     console.warn(`[API ERROR] ${error.config?.url}:`, message);
+
+    // Token kedaluwarsa/tidak valid: beri tahu pengguna satu kali saja
+    if (
+      error.response?.status === 401 &&
+      API.defaults.headers.common.Authorization &&
+      !sesiBerakhirDitampilkan
+    ) {
+      sesiBerakhirDitampilkan = true;
+      Alert.alert('Sesi Berakhir', 'Silakan keluar, lalu masuk kembali.');
+    }
     return Promise.reject(error);
   }
 );
 
+let sesiBerakhirDitampilkan = false;
+
+// Simpan atau hapus token login agar ikut terkirim di setiap permintaan
+export const setAuthToken = (token) => {
+  sesiBerakhirDitampilkan = false;
+  if (token) {
+    API.defaults.headers.common.Authorization = `Bearer ${token}`;
+  } else {
+    delete API.defaults.headers.common.Authorization;
+  }
+};
 export const setServerIP = (newIp) => {
   const cleanIp = newIp.trim().replace(/^https?:\/\//, '').replace(/\/api\/?$/, '').split(':')[0];
   const newBaseURL = `http://${cleanIp}:5000/api`;

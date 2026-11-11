@@ -1,3 +1,4 @@
+const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const path = require('path');
 const db = require('../config/db');
@@ -53,11 +54,11 @@ exports.getOverview = async (req, res) => {
         const [tenantCount] = await db.query('SELECT COUNT(*) as total FROM tenant');
         const [mahasiswaCount] = await db.query("SELECT COUNT(*) as total FROM pengguna WHERE peran = 'mahasiswa'");
         const [menuCount] = await db.query('SELECT COUNT(*) as total FROM menu');
-        
+
         const [orderStats] = await db.query(`
             SELECT 
                 COUNT(*) as total_pesanan,
-                COALESCE(SUM(CASE WHEN status_pesanan <> 'Dibatalkan' AND status_pembayaran NOT IN ('Menunggu Verifikasi', 'Bukti Ditolak') THEN total_harga ELSE 0 END), 0) as total_omzet,
+                COALESCE(SUM(CASE WHEN status_pesanan <> 'Dibatalkan' AND status_pembayaran = 'Sudah Dibayar' THEN total_harga ELSE 0 END), 0) as total_omzet,
                 SUM(CASE WHEN status_pesanan = 'Menunggu' THEN 1 ELSE 0 END) as menunggu,
                 SUM(CASE WHEN status_pesanan = 'Diproses' THEN 1 ELSE 0 END) as diproses,
                 SUM(CASE WHEN status_pesanan = 'Siap Diambil' THEN 1 ELSE 0 END) as siap_diambil,
@@ -109,7 +110,7 @@ exports.getOverview = async (req, res) => {
 // Mengambil seluruh Tenant dengan data analitik per stan
 exports.getTenants = async (req, res) => {
     try {
-                const query = `
+        const query = `
             SELECT t.id, t.nama_tenant, t.lokasi_stan, t.id_admin_pendaftar,
                    p.nama AS nama_pemilik, p.email AS email_pemilik, p.no_hp AS no_hp_pemilik,
                    (SELECT COUNT(*) FROM menu m WHERE m.id_tenant = t.id) AS total_menu,
@@ -117,7 +118,7 @@ exports.getTenants = async (req, res) => {
                    (SELECT COALESCE(SUM(ps.total_harga), 0) FROM pesanan ps
                      WHERE ps.id_tenant = t.id
                        AND ps.status_pesanan <> 'Dibatalkan'
-                       AND ps.status_pembayaran NOT IN ('Menunggu Verifikasi', 'Bukti Ditolak')) AS total_pendapatan
+                       AND ps.status_pembayaran = 'Sudah Dibayar') AS total_pendapatan
             FROM tenant t
             LEFT JOIN pengguna p ON t.id_admin_pendaftar = p.id
             ORDER BY t.id ASC
@@ -167,7 +168,8 @@ exports.registerTenant = async (req, res) => {
             });
         }
 
-                // Dua INSERT dibungkus transaksi: jika salah satu gagal, keduanya dibatalkan
+        // Dua INSERT dibungkus transaksi: jika salah satu gagal, keduanya dibatalkan
+        const hashSandi = await bcrypt.hash(String(kata_sandi).trim(), 10);
         const conn = await db.getConnection();
         let newUserId, newTenantId;
         try {
@@ -175,7 +177,7 @@ exports.registerTenant = async (req, res) => {
 
             const [userResult] = await conn.query(
                 'INSERT INTO pengguna (nama, email, kata_sandi, peran, no_hp) VALUES (?, ?, ?, ?, ?)',
-                [nama_pemilik, email, kata_sandi, 'tenant', no_hp || null]
+                [nama_pemilik, email, hashSandi, 'tenant', no_hp || null]
             );
             newUserId = userResult.insertId;
 
@@ -235,7 +237,7 @@ exports.deleteTenant = async (req, res) => {
 
         const tenant = tenants[0];
 
-                // Catat file bukti pembayaran milik stan ini sebelum datanya terhapus
+        // Catat file bukti pembayaran milik stan ini sebelum datanya terhapus
         const [fileBukti] = await db.query(
             'SELECT bukti_pembayaran FROM pesanan WHERE id_tenant = ? AND bukti_pembayaran IS NOT NULL',
             [id]
@@ -246,7 +248,7 @@ exports.deleteTenant = async (req, res) => {
         // Hapus file bukti dari folder uploads (gagal hapus file tidak menggagalkan proses)
         for (const row of fileBukti) {
             const namaFile = path.basename(String(row.bukti_pembayaran));
-            fs.promises.unlink(path.join(__dirname, '..', 'uploads', namaFile)).catch(() => {});
+            fs.promises.unlink(path.join(__dirname, '..', 'uploads', namaFile)).catch(() => { });
         }
 
         // Hapus akun pengguna jika ada

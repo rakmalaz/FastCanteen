@@ -59,7 +59,7 @@ export default function SuperAdminDashboardScreen({ navigation }) {
         setTenantsList(tenantsRes.data.data);
       }
       if (ordersRes.data.success) {
-         setOrdersList(ordersRes.data.data.map((o) => ({ ...o, status: o.status_pesanan })));
+        setOrdersList(ordersRes.data.data.map((o) => ({ ...o, status: o.status_pesanan })));
       }
       if (studentsRes.data.success) {
         setStudentsList(studentsRes.data.data);
@@ -497,8 +497,8 @@ export default function SuperAdminDashboardScreen({ navigation }) {
                             ord.status === 'Siap Diambil'
                               ? styles.badgeSiap
                               : ord.status === 'Selesai'
-                              ? styles.badgeSelesai
-                              : styles.badgeDiproses,
+                                ? styles.badgeSelesai
+                                : styles.badgeDiproses,
                           ]}
                         >
                           <Text style={styles.badgeStatusText}>{ord.status}</Text>
@@ -527,7 +527,7 @@ export default function SuperAdminDashboardScreen({ navigation }) {
 
               {/* Action Bar: Tombol Tambah Tenant */}
               <View style={styles.actionHeaderRow}>
-                <View>
+                <View style={{ flex: 1 }}>
                   <Text style={styles.sectionTitle}>Daftar Stan Tenant Kantin</Text>
                   <Text style={styles.sectionSubtitle}>
                     Total {tenantsList.length} stan terdaftar di Kantin Belakang Kampus 2
@@ -540,7 +540,7 @@ export default function SuperAdminDashboardScreen({ navigation }) {
                   activeOpacity={0.8}
                 >
                   <Ionicons name="add-circle" size={18} color={COLORS.cardBackground} />
-                  <Text style={styles.btnPrimaryAddText}>+ Daftarkan Tenant</Text>
+                  <Text style={styles.btnPrimaryAddText}>Daftarkan Tenant</Text>
                 </TouchableOpacity>
               </View>
 
@@ -671,8 +671,8 @@ export default function SuperAdminDashboardScreen({ navigation }) {
                           ord.status === 'Siap Diambil'
                             ? styles.badgeSiap
                             : ord.status === 'Selesai'
-                            ? styles.badgeSelesai
-                            : styles.badgeDiproses,
+                              ? styles.badgeSelesai
+                              : styles.badgeDiproses,
                         ]}
                       >
                         <Text style={styles.badgeStatusText}>{ord.status}</Text>
@@ -1302,8 +1302,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: SPACING.md,
+    gap: SPACING.md,
   },
   btnPrimaryAdd: {
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.primaryDark,
