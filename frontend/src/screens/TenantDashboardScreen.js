@@ -17,7 +17,9 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+imimport * as ImagePicker from 'expo-image-picker';
 import API, { resolveBuktiUrl } from '../api/axios';
+import FotoMenu from '../components/FotoMenu';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../constants/theme';
 
@@ -48,7 +50,7 @@ export default function TenantDashboardScreen({ navigation }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [newMenuNama, setNewMenuNama] = useState('');
   const [newMenuHarga, setNewMenuHarga] = useState('');
-  const [newMenuFoto, setNewMenuFoto] = useState('');
+  const [newMenuFoto, setNewMenuFoto] = useState(null); // { uri, base64, mimeType } foto dari galeri
   const [submittingMenu, setSubmittingMenu] = useState(false);
 
   // Modal Kirim Notifikasi Langsung ke Mahasiswa (Poin 7)
@@ -71,7 +73,7 @@ export default function TenantDashboardScreen({ navigation }) {
   const [notifMessage, setNotifMessage] = useState('');
   const [sendingNotif, setSendingNotif] = useState(false);
 
-    const fetchData = async () => {
+  const fetchData = async () => {
     if (!tenantId) {
       setLoading(false);
       setRefreshing(false);
@@ -101,7 +103,7 @@ export default function TenantDashboardScreen({ navigation }) {
     }
   };
 
-    useEffect(() => {
+  useEffect(() => {
     fetchData();
     const timer = setInterval(fetchData, 10000);
     return () => clearInterval(timer);
@@ -192,7 +194,53 @@ export default function TenantDashboardScreen({ navigation }) {
       Alert.alert('Gagal', err.response?.data?.message || err.message);
     }
   };
+  // Pilih foto dari galeri HP. Hasil: { uri, base64, mimeType }, atau null bila dibatalkan.
+  const pilihFotoDariGaleri = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true, // pengguna bisa memotong gambar
+        aspect: [1, 1], // kotak, sesuai tampilan kartu menu
+        quality: 0.5,
+        base64: true,
+      });
+      if (result.canceled) return null;
 
+      const asset = result.assets && result.assets[0];
+      if (!asset || !asset.base64) {
+        Alert.alert('Gambar Tidak Terbaca', 'Silakan pilih gambar lain.');
+        return null;
+      }
+      if (asset.base64.length * 0.75 > 2.8 * 1024 * 1024) {
+        Alert.alert('Gambar Terlalu Besar', 'Ukuran maksimal 3 MB. Pilih gambar lain.');
+        return null;
+      }
+      return { uri: asset.uri, base64: asset.base64, mimeType: asset.mimeType || 'image/jpeg' };
+    } catch (err) {
+      Alert.alert('Gagal Membuka Galeri', err.message || 'Terjadi kesalahan.');
+      return null;
+    }
+  };
+
+  // Ganti foto menu yang sudah ada
+  const handleGantiFoto = async (menuItem) => {
+    const foto = await pilihFotoDariGaleri();
+    if (!foto) return;
+
+    try {
+      const res = await API.put(
+        `/menu/${menuItem.id}`,
+        { foto_base64: foto.base64, foto_mime: foto.mimeType },
+        { timeout: 30000 }
+      );
+      if (res.data.success) {
+        Alert.alert('Berhasil', 'Foto menu berhasil diperbarui.');
+        fetchData();
+      }
+    } catch (err) {
+      Alert.alert('Gagal Mengganti Foto', err.response?.data?.message || err.message);
+    }
+  };
   // Tambah Menu Baru (US-09)
   const handleCreateMenu = async () => {
     // Ambil hanya angka: "15.000" atau "15,000" menjadi 15000
@@ -208,18 +256,17 @@ export default function TenantDashboardScreen({ navigation }) {
         id_tenant: tenantId,
         nama_menu: newMenuNama.trim(),
         harga: hargaAngka,
-        foto:
-          newMenuFoto.trim() ||
-          'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop&q=60',
+                foto_base64: newMenuFoto ? newMenuFoto.base64 : undefined,
+        foto_mime: newMenuFoto ? newMenuFoto.mimeType : undefined,
         status_tersedia: 'tersedia',
       };
 
-      const res = await API.post('/menu', payload);
+      const res = await API.post('/menu', payload, { timeout: 30000 });
       if (res.data.success) {
         Alert.alert('Berhasil', 'Menu baru berhasil ditambahkan ke stan kantin Anda!');
         setNewMenuNama('');
         setNewMenuHarga('');
-        setNewMenuFoto('');
+        setNewMenuFoto(null);
         setModalVisible(false);
         fetchData();
       }
@@ -810,12 +857,21 @@ export default function TenantDashboardScreen({ navigation }) {
             renderItem={({ item }) => {
               const isTersedia = item.status_tersedia === 'tersedia';
               return (
-                <View style={styles.tenantMenuCard}>
+                                <View style={styles.tenantMenuCard}>
+                  <FotoMenu foto={item.foto} style={styles.tenantMenuThumb} />
                   <View style={styles.tenantMenuInfo}>
                     <Text style={styles.tenantMenuName}>{item.nama_menu}</Text>
                     <Text style={styles.tenantMenuPrice}>
                       {formatIDR(item.harga)}
                     </Text>
+                    <TouchableOpacity
+                      style={styles.gantiFotoBtn}
+                      onPress={() => handleGantiFoto(item)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="camera-outline" size={13} color={COLORS.primaryDark} />
+                      <Text style={styles.gantiFotoText}>Ganti Foto</Text>
+                    </TouchableOpacity>
                   </View>
 
                   <TouchableOpacity
@@ -893,14 +949,24 @@ export default function TenantDashboardScreen({ navigation }) {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>URL Foto (Opsional)</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  placeholder="https://..."
-                  placeholderTextColor={COLORS.textSecondary}
-                  value={newMenuFoto}
-                  onChangeText={setNewMenuFoto}
-                />
+                                <Text style={styles.inputLabel}>Foto Menu (Opsional)</Text>
+                <TouchableOpacity
+                  style={styles.fotoPickerBox}
+                  onPress={async () => {
+                    const f = await pilihFotoDariGaleri();
+                    if (f) setNewMenuFoto(f);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  {newMenuFoto ? (
+                    <Image source={{ uri: newMenuFoto.uri }} style={styles.fotoPickerPreview} />
+                  ) : (
+                    <View style={styles.fotoPickerEmpty}>
+                      <Ionicons name="camera-outline" size={26} color={COLORS.textSecondary} />
+                      <Text style={styles.fotoPickerText}>Pilih foto dari galeri</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
               </View>
 
               <TouchableOpacity
@@ -1598,6 +1664,47 @@ const styles = StyleSheet.create({
   },
   tenantMenuInfo: {
     flex: 1,
+  },
+    tenantMenuThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: RADIUS.sm,
+    marginRight: SPACING.md,
+  },
+  gantiFotoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    marginTop: 4,
+  },
+  gantiFotoText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primaryDark,
+  },
+  fotoPickerBox: {
+    height: 140,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: COLORS.inactiveTab,
+    backgroundColor: COLORS.inputBackground,
+    overflow: 'hidden',
+  },
+  fotoPickerEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  fotoPickerText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  fotoPickerPreview: {
+    width: '100%',
+    height: '100%',
   },
   tenantMenuName: {
     fontSize: 13,

@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const fs = require('fs');
 const path = require('path');
+const pushService = require('../services/pushService');
 
 // ---------------------------------------------------------------
 // Upload bukti pembayaran (US-07): gambar dikirim base64, disimpan
@@ -235,7 +236,14 @@ exports.createPesanan = async (req, res) => {
         }
 
         await connection.commit();
-
+        // Push notification ke tenant (setelah commit; gagal kirim tidak membatalkan pesanan)
+        if (idPenerimaNotif) {
+            pushService.kirimPushKeUser(idPenerimaNotif, {
+                title: judulNotif,
+                body: pesanNotif,
+                data: { screen: 'tenant', id_pesanan: newPesananId }
+            });
+        }
         res.status(201).json({
             success: true,
             message: 'Pesanan FastCanteen berhasil dibuat',
@@ -350,7 +358,7 @@ exports.getPesananByTenant = async (req, res) => {
             query += ' AND p.status_pesanan = ?';
             params.push(statusPesanan);
         }
-        
+
         if (status_pembayaran) {
             query += ' AND p.status_pembayaran = ?';
             params.push(status_pembayaran);
@@ -563,6 +571,11 @@ exports.updateStatusPesanan = async (req, res) => {
                         tipeNotif
                     ]
                 );
+                pushService.kirimPushKeUser(order.id_mahasiswa, {
+                    title: judulNotif,
+                    body: pesanNotif,
+                    data: { screen: 'pesanan', id_pesanan: order.id }
+                });
             }
         }
 
@@ -657,6 +670,11 @@ exports.updateStatusPembayaran = async (req, res) => {
                         `Pembayaran untuk pesanan #${id} sebesar Rp ${Number(order.total_harga).toLocaleString('id-ID')} telah dikembalikan.`
                     ]
                 );
+                pushService.kirimPushKeUser(order.id_mahasiswa, {
+                    title: 'Pengembalian Dana Pembayaran 💸',
+                    body: `Pembayaran untuk pesanan #${id} sebesar Rp ${Number(order.total_harga).toLocaleString('id-ID')} telah dikembalikan.`,
+                    data: { screen: 'pesanan', id_pesanan: order.id }
+                });
             }
         }
 
@@ -737,6 +755,11 @@ exports.uploadBuktiPembayaran = async (req, res) => {
             } catch (notifErr) {
                 console.warn('⚠️ Notifikasi unggah ulang gagal (non-fatal):', notifErr.message);
             }
+            pushService.kirimPushKeUser(order.id_admin_pendaftar, {
+                title: 'Bukti Pembayaran Baru 🧾',
+                body: `Pembeli mengunggah ulang bukti untuk pesanan #${order.id}. Mohon verifikasi kembali.`,
+                data: { screen: 'tenant', id_pesanan: order.id }
+            });
         }
 
         res.status(200).json({
@@ -870,6 +893,11 @@ exports.verifikasiPembayaran = async (req, res) => {
         } catch (notifErr) {
             console.warn('⚠️ Notifikasi verifikasi gagal dibuat (non-fatal):', notifErr.message);
         }
+        pushService.kirimPushKeUser(order.id_mahasiswa, {
+            title: judul,
+            body: pesan,
+            data: { screen: 'pesanan', id_pesanan: order.id }
+        });
 
         const [updated] = await db.query('SELECT * FROM pesanan WHERE id = ?', [id]);
         res.status(200).json({
@@ -901,7 +929,7 @@ exports.batalkanPesananKedaluwarsa = async () => {
         `SELECT p.id, p.id_mahasiswa, t.id_admin_pendaftar
          FROM pesanan p JOIN tenant t ON p.id_tenant = t.id
          WHERE p.status_pesanan = 'Menunggu'
-           AND p.status_pembayaran IN ('Menunggu Verifikasi', 'Bukti Ditolak')
+           AND p.status_pembayaran = 'Bukti Ditolak'
            AND p.waktu_perubahan_status < (NOW() - INTERVAL ? MINUTE)`,
         [BATAS_MENIT_VERIFIKASI]
     );
@@ -926,6 +954,11 @@ exports.batalkanPesananKedaluwarsa = async () => {
         } catch (notifErr) {
             console.warn('⚠️ Notifikasi pembatalan otomatis gagal (non-fatal):', notifErr.message);
         }
+        pushService.kirimPushKeUser(order.id_mahasiswa, {
+            title: 'Pesanan Dibatalkan Otomatis ⏰',
+            body: `Pesanan #${order.id} dibatalkan karena pembayaran tidak terverifikasi dalam ${BATAS_MENIT_VERIFIKASI} menit.`,
+            data: { screen: 'pesanan', id_pesanan: order.id }
+        });
     }
     return rows.length;
 };

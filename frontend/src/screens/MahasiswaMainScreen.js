@@ -18,6 +18,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import API, { API_BASE_URL, setServerIP } from '../api/axios';
+import FotoMenu from '../components/FotoMenu';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { pilihDanUnggahBukti } from '../utils/uploadBukti';
@@ -547,15 +548,7 @@ export default function MahasiswaMainScreen({ navigation, route }) {
 
     return (
       <View style={styles.menuCard}>
-        <Image
-          source={{
-            uri:
-              item.foto ||
-              'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop&q=60',
-          }}
-          style={styles.menuImage}
-          resizeMode="cover"
-        />
+                <FotoMenu foto={item.foto} style={styles.menuImage} />
 
         <View style={styles.menuDetails}>
           <View style={styles.tenantTagRow}>

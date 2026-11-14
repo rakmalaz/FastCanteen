@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -81,9 +81,9 @@ function SimulatedQR({ seed, size }) {
 // Satu baris pada ringkasan kartu sukses pre-order
 function SummaryRow({ label, value, last, children }) {
   return (
-    <View style={[styles.summaryRow, !last && styles.summaryRowDivider]}>
-      <Text style={styles.summaryLabel}>{label}</Text>
-      {children || <Text style={styles.summaryValue}>{value}</Text>}
+    <View style={[styles.sumRow, !last && styles.sumRowDivider]}>
+      <Text style={styles.sumLabel}>{label}</Text>
+      {children || <Text style={styles.sumValue}>{value}</Text>}
     </View>
   );
 }
@@ -106,6 +106,8 @@ export default function CartCheckoutScreen({ navigation }) {
   const [submitting, setSubmitting] = useState(false);
   const [successOrder, setSuccessOrder] = useState(null); // data kartu sukses pre-order
   const [bukti, setBukti] = useState(null); // { uri, base64, mimeType } screenshot bukti pembayaran
+  // Kunci anti klik-ganda: berubah seketika (state baru terbaca setelah render ulang)
+  const sendingRef = useRef(false);
 
   const selectMethod = (method) => {
     setPaymentMethod(method);
@@ -160,6 +162,9 @@ export default function CartCheckoutScreen({ navigation }) {
       return;
     }
 
+    // Cegah pesanan ganda akibat tap berulang
+    if (sendingRef.current) return;
+    sendingRef.current = true;
     setSubmitting(true);
     try {
       const orderPayload = {
@@ -196,10 +201,15 @@ export default function CartCheckoutScreen({ navigation }) {
       }
     } catch (err) {
       const serverDetail = err.response?.data?.error ? ` (${err.response.data.error})` : '';
-      const msg =
-        (err.response?.data?.message || err.message || 'Gagal memproses pesanan') + serverDetail;
+      // Tanpa respons server = timeout / koneksi putus. Pesanan MUNGKIN sudah tersimpan,
+      // jadi arahkan pengguna memeriksa tab Pesanan dulu agar tidak memesan dobel.
+      const tanpaRespons = !err.response;
+      const msg = tanpaRespons
+        ? 'Koneksi lambat atau terputus. Cek tab Pesanan dulu sebelum mencoba lagi, agar pesanan tidak dobel.'
+        : (err.response?.data?.message || err.message || 'Gagal memproses pesanan') + serverDetail;
       Alert.alert('Kesalahan', msg);
     } finally {
+      sendingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -361,14 +371,7 @@ export default function CartCheckoutScreen({ navigation }) {
           {items.map((item, index) => (
             <View key={item.id}>
               <View style={styles.itemRow}>
-                <Image
-                  source={{
-                    uri:
-                      item.foto ||
-                      'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop&q=60',
-                  }}
-                  style={styles.itemImage}
-                />
+                                <FotoMenu foto={item.foto} style={styles.itemImage} />
                 <View style={styles.itemInfoCol}>
                   <Text style={styles.itemName} numberOfLines={1}>
                     {item.nama_menu}
@@ -1105,22 +1108,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.sm,
   },
-  summaryRow: {
+  sumRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 10,
     gap: SPACING.md,
   },
-  summaryRowDivider: {
+  sumRowDivider: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: COLORS.divider,
   },
-  summaryLabel: {
+  sumLabel: {
     fontSize: 13,
     color: COLORS.textSecondary,
   },
-  summaryValue: {
+  sumValue: {
     flex: 1,
     fontSize: 14,
     fontWeight: '700',
