@@ -5,6 +5,7 @@ const { wajibLogin, hanyaDiriSendiri } = require('../middleware/auth');
 
 router.post('/register', authController.register);
 router.post('/login', authController.login);
+router.get('/me', wajibLogin, authController.getMe);
 router.get('/profile/:id', wajibLogin, hanyaDiriSendiri('id'), authController.getProfile);
 
 module.exports = router;

@@ -15,6 +15,13 @@ exports.register = async (req, res) => {
             });
         }
 
+        if (String(kata_sandi).trim().length < 8) {
+            return res.status(400).json({
+                success: false,
+                message: 'Kata sandi minimal 8 karakter'
+            });
+        }
+
         // Hanya mahasiswa yang diperbolehkan mendaftar secara mandiri
         // Pendaftaran tenant dikelola sepenuhnya oleh Super Admin
         if (peran !== 'mahasiswa') {
@@ -50,7 +57,7 @@ exports.register = async (req, res) => {
         // Simpan akun mahasiswa
         const [resultUser] = await db.query(
             'INSERT INTO pengguna (nama, nim, email, kata_sandi, peran, no_hp) VALUES (?, ?, ?, ?, ?, ?)',
-            [nama, nim.trim(), email, await bcrypt.hash(String(kata_sandi).trim(), 10), 'mahasiswa', no_hp || null]
+            [nama, nim.trim(), email, await bcrypt.hash(String(kata_sandi).trim(), 12), 'mahasiswa', no_hp || null]
         );
 
         const newUserId = resultUser.insertId;
@@ -123,7 +130,7 @@ exports.login = async (req, res) => {
         }
 
         if (!sudahHash) {
-            const hashBaru = await bcrypt.hash(inputPassword, 10);
+            const hashBaru = await bcrypt.hash(inputPassword, 12);
             await db.query('UPDATE pengguna SET kata_sandi = ? WHERE id = ?', [hashBaru, user.id]);
         }
 
@@ -207,4 +214,11 @@ exports.getProfile = async (req, res) => {
             error: error.message
         });
     }
+};
+
+
+// Profil pengguna yang sedang login, diambil dari JWT (GET /api/auth/me)
+exports.getMe = (req, res) => {
+    req.params.id = req.user.id;
+    return exports.getProfile(req, res);
 };

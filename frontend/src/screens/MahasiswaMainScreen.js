@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import API, { API_BASE_URL, setServerIP } from '../api/axios';
 import FotoMenu from '../components/FotoMenu';
+import PushNotifikasiCard from '../components/PushNotifikasiCard';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { pilihDanUnggahBukti } from '../utils/uploadBukti';
@@ -298,7 +299,7 @@ export default function MahasiswaMainScreen({ navigation, route }) {
       Alert.alert('Info', `Nomor kontak untuk ${tenantName} belum tersedia.`);
       return;
     }
-        const cleanPhone = phone.replace(/\D/g, '').replace(/^0/, '62'); 
+    const cleanPhone = phone.replace(/\D/g, '').replace(/^0/, '62');
     const url = `https://wa.me/${cleanPhone}?text=Halo%20${encodeURIComponent(
       tenantName
     )},%20saya%20ingin%20menanyakan%20pesanan%20FastCanteen%20saya`;
@@ -548,7 +549,7 @@ export default function MahasiswaMainScreen({ navigation, route }) {
 
     return (
       <View style={styles.menuCard}>
-                <FotoMenu foto={item.foto} style={styles.menuImage} />
+        <FotoMenu foto={item.foto} style={styles.menuImage} />
 
         <View style={styles.menuDetails}>
           <View style={styles.tenantTagRow}>
@@ -1014,12 +1015,12 @@ export default function MahasiswaMainScreen({ navigation, route }) {
                     <Text style={styles.stanLocation}>
                       {item.waktu_transaksi
                         ? new Date(item.waktu_transaksi).toLocaleString('id-ID', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          }) + ' WIB'
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        }) + ' WIB'
                         : 'Waktu Transaksi'}
                     </Text>
                   </View>
@@ -1121,11 +1122,11 @@ export default function MahasiswaMainScreen({ navigation, route }) {
   const renderProfilView = () => {
     const initials = user?.nama
       ? user.nama
-          .split(' ')
-          .map((n) => n[0])
-          .slice(0, 2)
-          .join('')
-          .toUpperCase()
+        .split(' ')
+        .map((n) => n[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase()
       : 'MH';
 
     return (
@@ -1200,77 +1201,6 @@ export default function MahasiswaMainScreen({ navigation, route }) {
           </View>
         </View>
 
-        {/* TABEL DATA USER (Revisi Poin 3) */}
-        <View style={styles.userTableSection}>
-          <View style={styles.tableCardHeader}>
-            <Ionicons name="server" size={16} color={COLORS.primaryDark} />
-            <Text style={styles.tableCardTitle}>Tabel User (Entitas `pengguna`)</Text>
-          </View>
-
-          <View style={styles.tableContainer}>
-            <View style={styles.tableHeaderRow}>
-              <Text style={[styles.tableColHeader, { flex: 1.2 }]}>Kolom</Text>
-              <Text style={[styles.tableColHeader, { flex: 2 }]}>Data Akun</Text>
-            </View>
-
-            <View style={styles.tableDataRow}>
-              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>id (PK)</Text>
-              <Text style={[styles.tableValText, { flex: 2, fontWeight: '700' }]}>#{user?.id || '1'}</Text>
-            </View>
-
-            <View style={[styles.tableDataRow, styles.tableDataRowAlt]}>
-              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>nama</Text>
-              <Text style={[styles.tableValText, { flex: 2 }]}>{user?.nama || '-'}</Text>
-            </View>
-
-            <View style={styles.tableDataRow}>
-              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>nim</Text>
-              <Text style={[styles.tableValText, { flex: 2 }]}>{user?.nim || '-'}</Text>
-            </View>
-
-            <View style={[styles.tableDataRow, styles.tableDataRowAlt]}>
-              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>email</Text>
-              <Text style={[styles.tableValText, { flex: 2 }]}>{user?.email || '-'}</Text>
-            </View>
-
-            <View style={styles.tableDataRow}>
-              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>no_hp</Text>
-              <Text style={[styles.tableValText, { flex: 2 }]}>{user?.no_hp || '-'}</Text>
-            </View>
-
-            <View style={[styles.tableDataRow, styles.tableDataRowAlt]}>
-              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>peran</Text>
-              <View style={styles.roleTableBadge}>
-                <Text style={styles.roleTableBadgeText}>{user?.peran || 'mahasiswa'}</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* Pengaturan Jaringan & Server */}
-        <View style={styles.infoSection}>
-          <Text style={styles.infoSectionTitle}>Koneksi Server Backend</Text>
-
-          <View style={styles.serverCardRow}>
-            <View style={styles.infoIconBox}>
-              <Ionicons name="wifi-outline" size={18} color={COLORS.orange} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.infoLabel}>Alamat API Aktif</Text>
-              <Text style={styles.serverUrlText} numberOfLines={1}>
-                {currentBaseUrl}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.changeIpBtn}
-              onPress={() => setModalIpVisible(true)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.changeIpBtnText}>Ubah IP</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
         {/* Tentang Kantin Kampus */}
         <View style={styles.infoSection}>
           <Text style={styles.infoSectionTitle}>Lokasi Kantin</Text>
@@ -1286,6 +1216,8 @@ export default function MahasiswaMainScreen({ navigation, route }) {
             </View>
           </View>
         </View>
+
+        <PushNotifikasiCard />
 
         {/* Tombol Logout */}
         <TouchableOpacity
@@ -1681,8 +1613,8 @@ export default function MahasiswaMainScreen({ navigation, route }) {
                             item.tipe === 'siap_diambil'
                               ? { backgroundColor: COLORS.badgeSuccess }
                               : item.tipe === 'status_diproses'
-                              ? { backgroundColor: COLORS.statusWaitingBg }
-                              : { backgroundColor: COLORS.badgeBackground },
+                                ? { backgroundColor: COLORS.statusWaitingBg }
+                                : { backgroundColor: COLORS.badgeBackground },
                           ]}
                         >
                           <Ionicons
@@ -1690,16 +1622,16 @@ export default function MahasiswaMainScreen({ navigation, route }) {
                               item.tipe === 'siap_diambil'
                                 ? 'bag-check'
                                 : item.tipe === 'status_diproses'
-                                ? 'flame'
-                                : 'chatbubble-ellipses'
+                                  ? 'flame'
+                                  : 'chatbubble-ellipses'
                             }
                             size={16}
                             color={
                               item.tipe === 'siap_diambil'
                                 ? COLORS.textSuccessDark
                                 : item.tipe === 'status_diproses'
-                                ? COLORS.queueOrange
-                                : COLORS.primaryDark
+                                  ? COLORS.queueOrange
+                                  : COLORS.primaryDark
                             }
                           />
                         </View>

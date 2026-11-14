@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import API from '../api/axios';
+import FotoMenu from '../components/FotoMenu';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../constants/theme';

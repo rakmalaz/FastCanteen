@@ -17,9 +17,10 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-imimport * as ImagePicker from 'expo-image-picker';
+import * as ImagePicker from 'expo-image-picker';
 import API, { resolveBuktiUrl } from '../api/axios';
 import FotoMenu from '../components/FotoMenu';
+import PushNotifikasiCard from '../components/PushNotifikasiCard';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../constants/theme';
 
@@ -256,7 +257,7 @@ export default function TenantDashboardScreen({ navigation }) {
         id_tenant: tenantId,
         nama_menu: newMenuNama.trim(),
         harga: hargaAngka,
-                foto_base64: newMenuFoto ? newMenuFoto.base64 : undefined,
+        foto_base64: newMenuFoto ? newMenuFoto.base64 : undefined,
         foto_mime: newMenuFoto ? newMenuFoto.mimeType : undefined,
         status_tersedia: 'tersedia',
       };
@@ -418,6 +419,8 @@ export default function TenantDashboardScreen({ navigation }) {
           <Ionicons name="log-out-outline" size={20} color={COLORS.danger} />
         </TouchableOpacity>
       </View>
+
+      <PushNotifikasiCard />
 
       {/* Ringkasan Penjualan Hari Ini (US-13) */}
       <View style={styles.summaryContainer}>
@@ -857,7 +860,7 @@ export default function TenantDashboardScreen({ navigation }) {
             renderItem={({ item }) => {
               const isTersedia = item.status_tersedia === 'tersedia';
               return (
-                                <View style={styles.tenantMenuCard}>
+                <View style={styles.tenantMenuCard}>
                   <FotoMenu foto={item.foto} style={styles.tenantMenuThumb} />
                   <View style={styles.tenantMenuInfo}>
                     <Text style={styles.tenantMenuName}>{item.nama_menu}</Text>
@@ -949,7 +952,7 @@ export default function TenantDashboardScreen({ navigation }) {
               </View>
 
               <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Foto Menu (Opsional)</Text>
+                <Text style={styles.inputLabel}>Foto Menu (Opsional)</Text>
                 <TouchableOpacity
                   style={styles.fotoPickerBox}
                   onPress={async () => {
@@ -1665,7 +1668,7 @@ const styles = StyleSheet.create({
   tenantMenuInfo: {
     flex: 1,
   },
-    tenantMenuThumb: {
+  tenantMenuThumb: {
     width: 56,
     height: 56,
     borderRadius: RADIUS.sm,

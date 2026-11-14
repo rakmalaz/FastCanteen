@@ -210,28 +210,6 @@ exports.createMenu = async (req, res) => {
     }
 };
 
-        res.status(201).json({
-            success: true,
-            message: 'Menu berhasil ditambahkan',
-            data: {
-                id: result.insertId,
-                id_tenant,
-                nama_menu,
-                harga: parseFloat(harga),
-                foto: fotoUrl,
-                status_tersedia: statusTersedia
-            }
-        });
-    } catch (error) {
-        console.error('Error saat menambahkan menu:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Gagal menambahkan menu',
-            error: error.message
-        });
-    }
-};
-
 // Memperbarui menu makanan
 exports.updateMenu = async (req, res) => {
     try {
@@ -264,26 +242,6 @@ exports.updateMenu = async (req, res) => {
 
         // Foto lama sudah tergantikan: hapus filenya agar folder uploads tidak menumpuk
         if (foto_base64) await hapusFotoLama(existing[0].foto);
-
-        const [updated] = await db.query('SELECT * FROM menu WHERE id = ?', [id]);
-
-        res.status(200).json({
-            success: true,
-            message: 'Menu berhasil diperbarui',
-            data: updated[0]
-        });
-    } catch (error) {
-        if (error.statusCode) {
-            return res.status(error.statusCode).json({ success: false, message: error.message });
-        }
-        console.error('Error saat memperbarui menu:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Gagal memperbarui menu',
-            error: error.message
-        });
-    }
-};
 
         const [updated] = await db.query('SELECT * FROM menu WHERE id = ?', [id]);
 
