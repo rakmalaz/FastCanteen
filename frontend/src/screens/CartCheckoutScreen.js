@@ -15,7 +15,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import API from '../api/axios';
-import FotoMenu from '../components/FotoMenu';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../constants/theme';
@@ -103,7 +102,7 @@ export default function CartCheckoutScreen({ navigation }) {
   } = useCart();
 
   const [catatan, setCatatan] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('QRIS'); // 'QRIS' | 'E-Wallet' | 'Tunai'
+  const [paymentMethod, setPaymentMethod] = useState('QRIS'); // 'QRIS' | 'E-Wallet'
   const [submitting, setSubmitting] = useState(false);
   const [successOrder, setSuccessOrder] = useState(null); // data kartu sukses pre-order
   const [bukti, setBukti] = useState(null); // { uri, base64, mimeType } screenshot bukti pembayaran
@@ -155,7 +154,7 @@ export default function CartCheckoutScreen({ navigation }) {
       return;
     }
 
-    if (paymentMethod !== 'Tunai' && !bukti) {
+    if (!bukti) {
       Alert.alert(
         'Bukti Pembayaran Diperlukan',
         'Lakukan pembayaran, lalu unggah screenshot bukti pembayaran Anda terlebih dahulu.'
@@ -172,10 +171,10 @@ export default function CartCheckoutScreen({ navigation }) {
         id_mahasiswa: user.id,
         id_tenant: activeTenant?.id || items[0].id_tenant,
         metode_pembayaran: paymentMethod,
-        // Status pembayaran ditentukan oleh server (Tunai = Belum Dibayar, QRIS/E-Wallet = Menunggu Verifikasi)
+        // Status pembayaran ditentukan oleh server (selalu Menunggu Verifikasi)
         catatan: catatan.trim() || null,
-        bukti_base64: paymentMethod !== 'Tunai' ? bukti.base64 : undefined,
-        bukti_mime: paymentMethod !== 'Tunai' ? bukti.mimeType : undefined,
+        bukti_base64: bukti.base64,
+        bukti_mime: bukti.mimeType,
         items: items.map((item) => ({
           id_menu: item.id,
           jumlah_pesanan: item.quantity,
@@ -191,9 +190,7 @@ export default function CartCheckoutScreen({ navigation }) {
           stan: activeTenant?.nama_tenant || '-',
           total: res.data.data.total_harga ?? totalAmount,
           metode: paymentMethod,
-          statusBayar:
-            res.data.data.status_pembayaran ||
-            (paymentMethod === 'Tunai' ? 'Belum Dibayar' : 'Sudah Dibayar'),
+          statusBayar: res.data.data.status_pembayaran || 'Menunggu Verifikasi',
         };
         clearCart();
         setSuccessOrder(snapshot);
@@ -220,16 +217,9 @@ export default function CartCheckoutScreen({ navigation }) {
     navigation.replace('MahasiswaMain', { initialTab: 'pesanan' });
   };
 
-  const payKind =
-    successOrder?.statusBayar === 'Sudah Dibayar'
-      ? 'paid'
-      : successOrder?.statusBayar === 'Menunggu Verifikasi'
-      ? 'verifying'
-      : 'unpaid';
-  const pillColor =
-    payKind === 'paid' ? COLORS.textSuccessDark : payKind === 'verifying' ? COLORS.brownDark : COLORS.dangerDark;
-  const pillIcon =
-    payKind === 'paid' ? 'checkmark-circle' : payKind === 'verifying' ? 'hourglass-outline' : 'time-outline';
+  const payKind = successOrder?.statusBayar === 'Sudah Dibayar' ? 'paid' : 'verifying';
+  const pillColor = payKind === 'paid' ? COLORS.textSuccessDark : COLORS.brownDark;
+  const pillIcon = payKind === 'paid' ? 'checkmark-circle' : 'hourglass-outline';
 
   const successModal = (
     <Modal
@@ -248,9 +238,7 @@ export default function CartCheckoutScreen({ navigation }) {
 
           <Text style={styles.successTitle}>Pre-Order Berhasil!</Text>
           <Text style={styles.successSubtitle}>
-            {successOrder?.metode === 'Tunai'
-              ? 'Silakan bayar tunai saat mengambil pesanan di stan.'
-              : 'Bukti pembayaran Anda sedang diverifikasi oleh stan. Pesanan dimasak setelah pembayaran terverifikasi.'}
+            Bukti pembayaran Anda sedang diverifikasi oleh stan. Pesanan dimasak setelah pembayaran terverifikasi.
           </Text>
 
           {successOrder && (
@@ -263,11 +251,7 @@ export default function CartCheckoutScreen({ navigation }) {
                 <View
                   style={[
                     styles.statusPill,
-                    payKind === 'paid'
-                      ? styles.statusPillPaid
-                      : payKind === 'verifying'
-                      ? styles.statusPillVerifying
-                      : styles.statusPillUnpaid,
+                    payKind === 'paid' ? styles.statusPillPaid : styles.statusPillVerifying,
                   ]}
                 >
                   <Ionicons name={pillIcon} size={13} color={pillColor} />
@@ -477,31 +461,6 @@ export default function CartCheckoutScreen({ navigation }) {
             />
           </TouchableOpacity>
 
-          {/* Opsi Tunai */}
-          <TouchableOpacity
-            style={[
-              styles.paymentOption,
-              paymentMethod === 'Tunai' && styles.paymentOptionActive,
-            ]}
-            onPress={() => selectMethod('Tunai')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.paymentLeft}>
-              <View style={[styles.paymentIconBox, { backgroundColor: COLORS.badgeBackground }]}>
-                <Ionicons name="cash-outline" size={18} color={COLORS.textBody} />
-              </View>
-              <View>
-                <Text style={styles.paymentName}>Bayar Tunai di Stan</Text>
-                <Text style={styles.paymentSub}>Bayar saat ambil pesanan di stan</Text>
-              </View>
-            </View>
-            <Ionicons
-              name={paymentMethod === 'Tunai' ? 'radio-button-on' : 'radio-button-off'}
-              size={20}
-              color={paymentMethod === 'Tunai' ? COLORS.primaryDark : COLORS.textSecondary}
-            />
-          </TouchableOpacity>
-
           {/* Panel pembayaran sesuai metode yang dipilih */}
           {paymentMethod === 'QRIS' && (
             <View style={styles.qrisInfoBox}>
@@ -549,23 +508,6 @@ export default function CartCheckoutScreen({ navigation }) {
                 Transfer sesuai total tagihan ke salah satu nomor di atas, lalu unggah screenshot bukti pembayaran di bawah.
               </Text>
               {buktiAction}
-            </View>
-          )}
-
-          {paymentMethod === 'Tunai' && (
-            <View style={styles.qrisInfoBox}>
-              <View style={styles.qrisHeaderRow}>
-                <Ionicons name="cash-outline" size={18} color={COLORS.goldenBrown} />
-                <Text style={styles.qrisTitle}>Bayar Tunai di Stan</Text>
-              </View>
-              <View style={styles.unpaidBadge}>
-                <Ionicons name="time-outline" size={14} color={COLORS.dangerDark} />
-                <Text style={styles.unpaidBadgeText}>Belum Dibayar</Text>
-              </View>
-              <Text style={styles.qrisDesc}>
-                Siapkan uang tunai {formatIDR(totalAmount)} dan bayar saat mengambil pesanan di
-                stan. Status pembayaran tetap "Belum Dibayar" sampai tenant menerima uang Anda.
-              </Text>
             </View>
           )}
         </View>
@@ -1013,23 +955,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  unpaidBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 4,
-    backgroundColor: COLORS.dangerBg,
-    borderRadius: RADIUS.md,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    marginTop: SPACING.sm,
-    marginBottom: 4,
-  },
-  unpaidBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.dangerDark,
-  },
   buktiBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1144,9 +1069,6 @@ const styles = StyleSheet.create({
   },
   statusPillVerifying: {
     backgroundColor: COLORS.statusWaitingBg,
-  },
-  statusPillUnpaid: {
-    backgroundColor: COLORS.dangerBg,
   },
   statusPillText: {
     fontSize: 12,

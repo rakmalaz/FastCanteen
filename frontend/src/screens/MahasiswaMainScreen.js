@@ -19,7 +19,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import API, { API_BASE_URL, setServerIP } from '../api/axios';
 import FotoMenu from '../components/FotoMenu';
-import PushNotifikasiCard from '../components/PushNotifikasiCard';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { pilihDanUnggahBukti } from '../utils/uploadBukti';
@@ -60,6 +59,8 @@ export default function MahasiswaMainScreen({ navigation, route }) {
   const [refreshingMenu, setRefreshingMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTenantId, setSelectedTenantId] = useState(null);
+  const [tenantModalVisible, setTenantModalVisible] = useState(false); // popup filter stan
+  const [tenantSearch, setTenantSearch] = useState('');
 
   // ==========================================
   // DATA STATES: PESANAN & RIWAYAT (US-11)
@@ -299,7 +300,7 @@ export default function MahasiswaMainScreen({ navigation, route }) {
       Alert.alert('Info', `Nomor kontak untuk ${tenantName} belum tersedia.`);
       return;
     }
-    const cleanPhone = phone.replace(/\D/g, '').replace(/^0/, '62');
+        const cleanPhone = phone.replace(/\D/g, '').replace(/^0/, '62'); 
     const url = `https://wa.me/${cleanPhone}?text=Halo%20${encodeURIComponent(
       tenantName
     )},%20saya%20ingin%20menanyakan%20pesanan%20FastCanteen%20saya`;
@@ -509,37 +510,47 @@ export default function MahasiswaMainScreen({ navigation, route }) {
         )}
       </View>
 
-      {/* Filter Stan Kantin */}
-      <Text style={styles.sectionTitle}>Pilih Stan Kantin:</Text>
-      <FlatList
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        data={[{ id: null, nama_tenant: '✨ Semua Stan' }, ...tenants]}
-        keyExtractor={(item) => String(item.id ?? 'all')}
-        contentContainerStyle={styles.tenantFilterList}
-        renderItem={({ item }) => {
-          const isSelected = selectedTenantId === item.id;
-          return (
-            <TouchableOpacity
-              style={[
-                styles.tenantFilterChip,
-                isSelected && styles.tenantFilterChipActive,
-              ]}
-              onPress={() => setSelectedTenantId(item.id)}
-              activeOpacity={0.7}
-            >
-              <Text
-                style={[
-                  styles.tenantFilterText,
-                  isSelected && styles.tenantFilterTextActive,
-                ]}
-              >
-                {item.nama_tenant}
-              </Text>
-            </TouchableOpacity>
-          );
-        }}
-      />
+      {/* Filter Stan Kantin: tombol yang membuka daftar stan (tidak lagi geser kiri-kanan) */}
+      <Text style={styles.sectionTitle}>Stan Kantin:</Text>
+      <View style={styles.tenantFilterRow}>
+        <TouchableOpacity
+          style={[styles.tenantFilterBtn, selectedTenantId !== null && styles.tenantFilterBtnActive]}
+          onPress={() => {
+            setTenantSearch('');
+            setTenantModalVisible(true);
+          }}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name="options-outline"
+            size={18}
+            color={selectedTenantId !== null ? COLORS.cardBackground : COLORS.primaryDark}
+          />
+          <Text
+            style={[styles.tenantFilterBtnText, selectedTenantId !== null && styles.tenantFilterBtnTextActive]}
+            numberOfLines={1}
+          >
+            {selectedTenantId === null
+              ? 'Filter Stan: Semua Stan'
+              : `Stan: ${tenants.find((t) => t.id === selectedTenantId)?.nama_tenant || 'Terpilih'}`}
+          </Text>
+          <Ionicons
+            name="chevron-down"
+            size={16}
+            color={selectedTenantId !== null ? COLORS.cardBackground : COLORS.textSecondary}
+          />
+        </TouchableOpacity>
+
+        {selectedTenantId !== null && (
+          <TouchableOpacity
+            style={styles.tenantFilterReset}
+            onPress={() => setSelectedTenantId(null)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="close" size={18} color={COLORS.danger} />
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 
@@ -549,7 +560,7 @@ export default function MahasiswaMainScreen({ navigation, route }) {
 
     return (
       <View style={styles.menuCard}>
-        <FotoMenu foto={item.foto} style={styles.menuImage} />
+                <FotoMenu foto={item.foto} style={styles.menuImage} />
 
         <View style={styles.menuDetails}>
           <View style={styles.tenantTagRow}>
@@ -839,7 +850,7 @@ export default function MahasiswaMainScreen({ navigation, route }) {
                 </View>
 
                 {/* Info Verifikasi Pembayaran */}
-                {stBayar === 'Menunggu Verifikasi' && item.metode_pembayaran !== 'Tunai' && (
+                {stBayar === 'Menunggu Verifikasi' && (
                   <View style={styles.verifNoticeMhs}>
                     <Ionicons name="hourglass-outline" size={16} color={COLORS.brownDark} />
                     <Text style={styles.verifNoticeMhsText}>
@@ -853,8 +864,10 @@ export default function MahasiswaMainScreen({ navigation, route }) {
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.verifNoticeMhsText, { color: COLORS.dangerDark }]}>
                         Bukti pembayaran ditolak
-                        {item.catatan_verifikasi ? `: ${item.catatan_verifikasi}` : '.'} (penolakan{' '}
-                        {item.jumlah_penolakan || 1} dari 3)
+                        {item.catatan_verifikasi ? `: ${item.catatan_verifikasi}` : '.'} (bukti ke-{item.jumlah_penolakan || 1} ditolak).{' '}
+                        {(item.jumlah_penolakan || 1) >= 2
+                          ? 'Ini kesempatan TERAKHIR: jika bukti berikutnya tidak valid, pesanan dibatalkan.'
+                          : 'Anda masih punya 2 kesempatan unggah ulang.'}
                       </Text>
                       <TouchableOpacity
                         style={styles.reuploadBtn}
@@ -1015,12 +1028,12 @@ export default function MahasiswaMainScreen({ navigation, route }) {
                     <Text style={styles.stanLocation}>
                       {item.waktu_transaksi
                         ? new Date(item.waktu_transaksi).toLocaleString('id-ID', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        }) + ' WIB'
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          }) + ' WIB'
                         : 'Waktu Transaksi'}
                     </Text>
                   </View>
@@ -1122,11 +1135,11 @@ export default function MahasiswaMainScreen({ navigation, route }) {
   const renderProfilView = () => {
     const initials = user?.nama
       ? user.nama
-        .split(' ')
-        .map((n) => n[0])
-        .slice(0, 2)
-        .join('')
-        .toUpperCase()
+          .split(' ')
+          .map((n) => n[0])
+          .slice(0, 2)
+          .join('')
+          .toUpperCase()
       : 'MH';
 
     return (
@@ -1201,6 +1214,77 @@ export default function MahasiswaMainScreen({ navigation, route }) {
           </View>
         </View>
 
+        {/* TABEL DATA USER (Revisi Poin 3) */}
+        <View style={styles.userTableSection}>
+          <View style={styles.tableCardHeader}>
+            <Ionicons name="server" size={16} color={COLORS.primaryDark} />
+            <Text style={styles.tableCardTitle}>Tabel User (Entitas `pengguna`)</Text>
+          </View>
+
+          <View style={styles.tableContainer}>
+            <View style={styles.tableHeaderRow}>
+              <Text style={[styles.tableColHeader, { flex: 1.2 }]}>Kolom</Text>
+              <Text style={[styles.tableColHeader, { flex: 2 }]}>Data Akun</Text>
+            </View>
+
+            <View style={styles.tableDataRow}>
+              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>id (PK)</Text>
+              <Text style={[styles.tableValText, { flex: 2, fontWeight: '700' }]}>#{user?.id || '1'}</Text>
+            </View>
+
+            <View style={[styles.tableDataRow, styles.tableDataRowAlt]}>
+              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>nama</Text>
+              <Text style={[styles.tableValText, { flex: 2 }]}>{user?.nama || '-'}</Text>
+            </View>
+
+            <View style={styles.tableDataRow}>
+              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>nim</Text>
+              <Text style={[styles.tableValText, { flex: 2 }]}>{user?.nim || '-'}</Text>
+            </View>
+
+            <View style={[styles.tableDataRow, styles.tableDataRowAlt]}>
+              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>email</Text>
+              <Text style={[styles.tableValText, { flex: 2 }]}>{user?.email || '-'}</Text>
+            </View>
+
+            <View style={styles.tableDataRow}>
+              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>no_hp</Text>
+              <Text style={[styles.tableValText, { flex: 2 }]}>{user?.no_hp || '-'}</Text>
+            </View>
+
+            <View style={[styles.tableDataRow, styles.tableDataRowAlt]}>
+              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>peran</Text>
+              <View style={styles.roleTableBadge}>
+                <Text style={styles.roleTableBadgeText}>{user?.peran || 'mahasiswa'}</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Pengaturan Jaringan & Server */}
+        <View style={styles.infoSection}>
+          <Text style={styles.infoSectionTitle}>Koneksi Server Backend</Text>
+
+          <View style={styles.serverCardRow}>
+            <View style={styles.infoIconBox}>
+              <Ionicons name="wifi-outline" size={18} color={COLORS.orange} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.infoLabel}>Alamat API Aktif</Text>
+              <Text style={styles.serverUrlText} numberOfLines={1}>
+                {currentBaseUrl}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.changeIpBtn}
+              onPress={() => setModalIpVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.changeIpBtnText}>Ubah IP</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Tentang Kantin Kampus */}
         <View style={styles.infoSection}>
           <Text style={styles.infoSectionTitle}>Lokasi Kantin</Text>
@@ -1216,8 +1300,6 @@ export default function MahasiswaMainScreen({ navigation, route }) {
             </View>
           </View>
         </View>
-
-        <PushNotifikasiCard />
 
         {/* Tombol Logout */}
         <TouchableOpacity
@@ -1613,8 +1695,8 @@ export default function MahasiswaMainScreen({ navigation, route }) {
                             item.tipe === 'siap_diambil'
                               ? { backgroundColor: COLORS.badgeSuccess }
                               : item.tipe === 'status_diproses'
-                                ? { backgroundColor: COLORS.statusWaitingBg }
-                                : { backgroundColor: COLORS.badgeBackground },
+                              ? { backgroundColor: COLORS.statusWaitingBg }
+                              : { backgroundColor: COLORS.badgeBackground },
                           ]}
                         >
                           <Ionicons
@@ -1622,16 +1704,16 @@ export default function MahasiswaMainScreen({ navigation, route }) {
                               item.tipe === 'siap_diambil'
                                 ? 'bag-check'
                                 : item.tipe === 'status_diproses'
-                                  ? 'flame'
-                                  : 'chatbubble-ellipses'
+                                ? 'flame'
+                                : 'chatbubble-ellipses'
                             }
                             size={16}
                             color={
                               item.tipe === 'siap_diambil'
                                 ? COLORS.textSuccessDark
                                 : item.tipe === 'status_diproses'
-                                  ? COLORS.queueOrange
-                                  : COLORS.primaryDark
+                                ? COLORS.queueOrange
+                                : COLORS.primaryDark
                             }
                           />
                         </View>
@@ -1658,6 +1740,80 @@ export default function MahasiswaMainScreen({ navigation, route }) {
                 }}
               />
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ==========================================
+          MODAL FILTER STAN (pengganti chip geser kiri-kanan)
+         ========================================== */}
+      <Modal
+        visible={tenantModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setTenantModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { maxHeight: '80%', paddingBottom: 16 }]}>
+            <View style={styles.modalHeaderRow}>
+              <Ionicons name="storefront" size={22} color={COLORS.primaryDark} />
+              <Text style={[styles.modalTitle, { flex: 1 }]}>Pilih Stan Kantin</Text>
+              <TouchableOpacity onPress={() => setTenantModalVisible(false)}>
+                <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.searchContainer, { marginHorizontal: 0, marginBottom: 8 }]}>
+              <Ionicons name="search-outline" size={18} color={COLORS.textSecondary} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Cari nama stan..."
+                placeholderTextColor={COLORS.textSecondary}
+                value={tenantSearch}
+                onChangeText={setTenantSearch}
+              />
+              {tenantSearch.length > 0 && (
+                <TouchableOpacity onPress={() => setTenantSearch('')}>
+                  <Ionicons name="close-circle" size={17} color={COLORS.textSecondary} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <FlatList
+              data={[{ id: null, nama_tenant: 'Semua Stan', lokasi_stan: `${tenants.length} stan tersedia` }, ...tenants].filter(
+                (t) =>
+                  t.id === null
+                    ? !tenantSearch.trim()
+                    : String(t.nama_tenant || '').toLowerCase().includes(tenantSearch.trim().toLowerCase())
+              )}
+              keyExtractor={(t) => String(t.id ?? 'all')}
+              keyboardShouldPersistTaps="handled"
+              ListEmptyComponent={<Text style={styles.tenantPickEmpty}>Stan tidak ditemukan.</Text>}
+              renderItem={({ item: t }) => {
+                const aktif = selectedTenantId === t.id;
+                return (
+                  <TouchableOpacity
+                    style={[styles.tenantPickRow, aktif && styles.tenantPickRowActive]}
+                    onPress={() => {
+                      setSelectedTenantId(t.id);
+                      setTenantModalVisible(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.tenantPickIcon}>
+                      <Ionicons name={t.id === null ? 'apps' : 'storefront'} size={16} color={COLORS.primaryDark} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.tenantPickName} numberOfLines={1}>{t.nama_tenant}</Text>
+                      {!!t.lokasi_stan && (
+                        <Text style={styles.tenantPickSub} numberOfLines={1}>{t.lokasi_stan}</Text>
+                      )}
+                    </View>
+                    {aktif && <Ionicons name="checkmark-circle" size={20} color={COLORS.primaryDark} />}
+                  </TouchableOpacity>
+                );
+              }}
+            />
           </View>
         </View>
       </Modal>
@@ -1864,30 +2020,78 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     marginBottom: SPACING.sm,
   },
-  tenantFilterList: {
-    paddingVertical: 2,
+  tenantFilterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
-  tenantFilterChip: {
+  tenantFilterBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: RADIUS.full,
+    paddingVertical: 11,
+    borderRadius: RADIUS.lg,
     backgroundColor: COLORS.inputBackground,
     borderWidth: 1,
     borderColor: COLORS.inactiveElement,
   },
-  tenantFilterChipActive: {
+  tenantFilterBtnActive: {
     backgroundColor: COLORS.primaryDark,
     borderColor: COLORS.primaryDark,
   },
-  tenantFilterText: {
-    fontSize: 12,
-    fontWeight: '600',
+  tenantFilterBtnText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '700',
     color: COLORS.textBody,
   },
-  tenantFilterTextActive: {
+  tenantFilterBtnTextActive: {
     color: COLORS.cardBackground,
+  },
+  tenantFilterReset: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.dangerBg,
+  },
+  tenantPickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 10,
+    borderRadius: RADIUS.md,
+  },
+  tenantPickRowActive: {
+    backgroundColor: COLORS.badgeSuccess,
+  },
+  tenantPickIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.badgeBackground,
+  },
+  tenantPickName: {
+    fontSize: 14,
     fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  tenantPickSub: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginTop: 1,
+  },
+  tenantPickEmpty: {
+    textAlign: 'center',
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    paddingVertical: 24,
   },
   menuCard: {
     flexDirection: 'row',

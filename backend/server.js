@@ -73,7 +73,7 @@ app.use((err, req, res, next) => {
     });
 });
 
-// Pembatalan otomatis pesanan non-tunai yang pembayarannya tidak terverifikasi (cek tiap menit)
+// Pembatalan otomatis pesanan yang pembayarannya tidak terverifikasi (cek tiap menit)
 const pesananController = require('./controllers/pesananController');
 setInterval(async () => {
     try {

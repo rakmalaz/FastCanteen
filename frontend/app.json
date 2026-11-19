@@ -11,8 +11,7 @@
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundColor": "#00442A"
       },
-      "package": "com.fastcanteen.app",
-      "googleServicesFile": "./google-services.json"
+      "package": "com.fastcanteen.app"
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
@@ -25,13 +24,7 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200
         }
-      ],
-      "expo-notifications"
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "485ad844-3135-4837-bd33-ca8556aed7b4"
-      }
-    }
+      ]
+    ]
   }
 }

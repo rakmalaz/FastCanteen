@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const path = require('path');
 const db = require('../config/db');
+const statistikService = require('../services/statistikService');
 
 // Daftar 4 Super Admin Resmi FastCanteen UINSA Sunan Ampel Kampus 2
 const OFFICIAL_SUPER_ADMINS = [
@@ -78,10 +79,13 @@ exports.getOverview = async (req, res) => {
             LIMIT 5
         `);
 
+        const peringkat = await statistikService.getRankingTenant();
+
         res.status(200).json({
             success: true,
             data: {
                 super_admins: superAdmins,
+                tenant_tertinggi: peringkat.tertinggi,
                 statistik: {
                     total_tenant: tenantCount[0].total,
                     total_mahasiswa: mahasiswaCount[0].total,
@@ -368,4 +372,34 @@ exports.getSuperAdmins = (req, res) => {
         success: true,
         data: OFFICIAL_SUPER_ADMINS
     });
+};
+
+// Peringkat & statistik seluruh tenant (omzet tertinggi, pesanan terbanyak, dll)
+exports.getStatistikSemuaTenant = async (req, res) => {
+    try {
+        const data = await statistikService.getRankingTenant();
+        res.status(200).json({ success: true, data });
+    } catch (error) {
+        console.error('Error saat mengambil statistik semua tenant:', error);
+        res.status(500).json({ success: false, message: 'Gagal mengambil statistik tenant', error: error.message });
+    }
+};
+
+// Statistik detail satu tenant (dilihat Super Admin)
+exports.getStatistikTenant = async (req, res) => {
+    try {
+        const [tenants] = await db.query(
+            `SELECT t.id, t.nama_tenant, t.lokasi_stan, p.nama AS nama_pemilik
+             FROM tenant t LEFT JOIN pengguna p ON t.id_admin_pendaftar = p.id WHERE t.id = ?`,
+            [req.params.id]
+        );
+        if (tenants.length === 0) {
+            return res.status(404).json({ success: false, message: 'Tenant tidak ditemukan' });
+        }
+        const statistik = await statistikService.getStatistikTenant(req.params.id, req.query.hari);
+        res.status(200).json({ success: true, data: { tenant: tenants[0], ...statistik } });
+    } catch (error) {
+        console.error('Error saat mengambil statistik tenant (admin):', error);
+        res.status(500).json({ success: false, message: 'Gagal mengambil statistik tenant', error: error.message });
+    }
 };

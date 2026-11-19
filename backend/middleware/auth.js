@@ -8,22 +8,11 @@ if (!JWT_SECRET || JWT_SECRET.length < 16) {
     process.exit(1);
 }
 
-// Identitas penerbit & tujuan token (diperiksa lagi saat verifikasi)
-const JWT_ISSUER = 'fastcanteen-api';
-const JWT_AUDIENCE = 'fastcanteen-app';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
-
 const tolak = (res, kode, pesan) => res.status(kode).json({ success: false, message: pesan });
 
-// Membuat access token login. Payload hanya id & peran (tanpa data rahasia).
+// Membuat token login (berlaku 7 hari)
 exports.buatToken = (user) =>
-    jwt.sign({ id: user.id, peran: user.peran }, JWT_SECRET, {
-        subject: String(user.id),
-        expiresIn: JWT_EXPIRES_IN,
-        issuer: JWT_ISSUER,
-        audience: JWT_AUDIENCE,
-        algorithm: 'HS256'
-    });
+    jwt.sign({ id: user.id, peran: user.peran }, JWT_SECRET, { expiresIn: '7d' });
 
 // Wajib membawa token yang valid. Hasilnya: req.user = { id, peran }
 exports.wajibLogin = (req, res, next) => {
@@ -31,20 +20,10 @@ exports.wajibLogin = (req, res, next) => {
     const token = header.startsWith('Bearer ') ? header.slice(7) : null;
     if (!token) return tolak(res, 401, 'Silakan login terlebih dahulu');
     try {
-        req.user = jwt.verify(token, JWT_SECRET, {
-            issuer: JWT_ISSUER,
-            audience: JWT_AUDIENCE,
-            algorithms: ['HS256']
-        });
+        req.user = jwt.verify(token, JWT_SECRET);
         next();
     } catch (err) {
-        return tolak(
-            res,
-            401,
-            err.name === 'TokenExpiredError'
-                ? 'Sesi berakhir. Silakan login ulang'
-                : 'Token tidak valid. Silakan login ulang'
-        );
+        return tolak(res, 401, 'Sesi berakhir atau tidak valid. Silakan login ulang');
     }
 };
 

@@ -2,6 +2,7 @@ const db = require('../config/db');
 const fs = require('fs');
 const path = require('path');
 const pushService = require('../services/pushService');
+const statistikService = require('../services/statistikService');
 
 // ---------------------------------------------------------------
 // Upload bukti pembayaran (US-07): gambar dikirim base64, disimpan
@@ -10,7 +11,7 @@ const pushService = require('../services/pushService');
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 const MIME_EXT = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 const MAX_BUKTI_BYTES = 5 * 1024 * 1024; // 5 MB
-const METODE_VALID = ['QRIS', 'E-Wallet', 'Tunai'];
+const METODE_VALID = ['QRIS', 'E-Wallet'];
 
 const errorBukti = (message) => {
     const err = new Error(message);
@@ -73,11 +74,11 @@ exports.createPesanan = async (req, res) => {
             });
         }
 
-        // US-07: pembayaran non-tunai wajib melampirkan bukti transaksi
-        if (metode_pembayaran !== 'Tunai' && !bukti_base64) {
+        // US-07: semua pesanan wajib melampirkan bukti transaksi
+        if (!bukti_base64) {
             return res.status(400).json({
                 success: false,
-                message: 'Bukti pembayaran wajib diunggah untuk pembayaran non-tunai'
+                message: 'Bukti pembayaran wajib diunggah'
             });
         }
 
@@ -161,9 +162,8 @@ exports.createPesanan = async (req, res) => {
         }
 
         // Status ditentukan SERVER (nilai dari aplikasi diabaikan):
-        // Tunai = Belum Dibayar (bayar saat ambil di stan)
         // QRIS / E-Wallet = Menunggu Verifikasi (tenant cek mutasi dulu sebelum memasak)
-        const finalStatusPembayaran = metode_pembayaran === 'Tunai' ? 'Belum Dibayar' : 'Menunggu Verifikasi';
+        const finalStatusPembayaran = 'Menunggu Verifikasi';
         const finalStatusPesanan = 'Menunggu';
 
         // 4. Simpan ke tabel pesanan (tanpa jam_pengambilan)
@@ -204,11 +204,8 @@ exports.createPesanan = async (req, res) => {
         }
 
         // 6. Buat otomatis notifikasi untuk tenant (kirim ke id_admin_pendaftar)
-        const perluVerifikasi = finalStatusPembayaran === 'Menunggu Verifikasi';
-        const judulNotif = perluVerifikasi ? 'Pesanan Baru - Perlu Verifikasi 🧾' : 'Pesanan Baru Masuk! 🛎️';
-        const pesanNotif = perluVerifikasi
-            ? `Pesanan #${newPesananId} dari ${namaMahasiswa} sebesar Rp ${Number(totalHarga).toLocaleString('id-ID')} menunggu verifikasi pembayaran. Cek bukti dan mutasi Anda.`
-            : `Pesanan #${newPesananId} dari ${namaMahasiswa} sebesar Rp ${Number(totalHarga).toLocaleString('id-ID')} telah masuk. Mohon segera diproses.`;
+        const judulNotif = 'Pesanan Baru - Perlu Verifikasi 🧾';
+        const pesanNotif = `Pesanan #${newPesananId} dari ${namaMahasiswa} sebesar Rp ${Number(totalHarga).toLocaleString('id-ID')} menunggu verifikasi pembayaran. Cek bukti dan mutasi Anda.`;
 
         // Ambil penerima notifikasi (admin pendaftar tenant atau fallback ke admin)
         let idPenerimaNotif = tenantData.id_admin_pendaftar;
@@ -364,7 +361,9 @@ exports.getPesananByTenant = async (req, res) => {
             params.push(status_pembayaran);
         }
 
-        query += " ORDER BY (p.status_pembayaran = 'Menunggu Verifikasi' AND p.status_pesanan = 'Menunggu') DESC, p.id DESC";
+        // Urutan murni dari pesanan TERBARU ke terlama (id naik mengikuti waktu pesan).
+        // Pesanan yang perlu verifikasi tetap mudah ditemukan lewat filter "Perlu Verifikasi".
+        query += ' ORDER BY p.id DESC';
 
         const [pesananRows] = await db.query(query, params);
 
@@ -461,9 +460,9 @@ exports.updateStatusPesanan = async (req, res) => {
             });
         }
 
-        // Aturan verifikasi: pesanan non-tunai tidak boleh diproses sebelum pembayarannya terverifikasi
+        // Aturan verifikasi: pesanan tidak boleh diproses sebelum pembayarannya terverifikasi
         const [cekRows] = await db.query(
-            'SELECT metode_pembayaran, status_pembayaran, status_pesanan FROM pesanan WHERE id = ?',
+            'SELECT status_pembayaran, status_pesanan FROM pesanan WHERE id = ?',
             [id]
         );
         if (cekRows.length === 0) {
@@ -474,7 +473,7 @@ exports.updateStatusPesanan = async (req, res) => {
         }
         const cek = cekRows[0];
         const butuhLunas = ['Diproses', 'Siap Diambil', 'Selesai'].includes(status);
-        if (butuhLunas && cek.metode_pembayaran !== 'Tunai' && cek.status_pembayaran !== 'Sudah Dibayar') {
+        if (butuhLunas && cek.status_pembayaran !== 'Sudah Dibayar') {
             return res.status(409).json({
                 success: false,
                 message: 'Pembayaran pesanan ini belum terverifikasi. Verifikasi bukti pembayaran terlebih dahulu.'
@@ -496,16 +495,9 @@ exports.updateStatusPesanan = async (req, res) => {
             });
         }
 
-        // Pesanan Tunai otomatis menjadi 'Sudah Dibayar' saat Selesai (uang diterima di stan)
         const [result] = await db.query(
-            `UPDATE pesanan
-             SET status_pesanan = ?,
-                 status_pembayaran = CASE
-                     WHEN ? = 'Selesai' AND metode_pembayaran = 'Tunai' AND status_pembayaran = 'Belum Dibayar'
-                     THEN 'Sudah Dibayar' ELSE status_pembayaran END,
-                 waktu_perubahan_status = NOW()
-             WHERE id = ?`,
-            [status, status, id]
+            'UPDATE pesanan SET status_pesanan = ?, waktu_perubahan_status = NOW() WHERE id = ?',
+            [status, id]
         );
 
         if (result.affectedRows === 0) {
@@ -598,14 +590,14 @@ exports.updateStatusPesanan = async (req, res) => {
 
 // Memperbarui Status Pembayaran (BARU)
 // PUT /api/pesanan/:id/status-pembayaran
-// Validasi: 'Belum Dibayar', 'Sudah Dibayar', 'Dikembalikan'
+// Satu-satunya perubahan manual yang diizinkan: 'Sudah Dibayar' -> 'Dikembalikan'
 // Otomatis kirim notifikasi saat status = 'Dikembalikan'
 exports.updateStatusPembayaran = async (req, res) => {
     try {
         const { id } = req.params;
         const { status_pembayaran } = req.body;
 
-        const validStatus = ['Belum Dibayar', 'Sudah Dibayar', 'Dikembalikan'];
+        const validStatus = ['Sudah Dibayar', 'Dikembalikan'];
         if (!status_pembayaran || !validStatus.includes(status_pembayaran)) {
             return res.status(400).json({
                 success: false,
@@ -613,9 +605,9 @@ exports.updateStatusPembayaran = async (req, res) => {
             });
         }
 
-        // Batasi perubahan manual agar QRIS/E-Wallet tidak lolos tanpa verifikasi bukti
+        // Batasi perubahan manual agar pembayaran tidak lolos tanpa verifikasi bukti
         const [cekBayar] = await db.query(
-            'SELECT metode_pembayaran, status_pembayaran FROM pesanan WHERE id = ?',
+            'SELECT status_pembayaran FROM pesanan WHERE id = ?',
             [id]
         );
         if (cekBayar.length === 0) {
@@ -623,11 +615,8 @@ exports.updateStatusPembayaran = async (req, res) => {
         }
         const bayarSaatIni = cekBayar[0];
         const boleh =
-            (status_pembayaran === 'Sudah Dibayar' &&
-                bayarSaatIni.metode_pembayaran === 'Tunai' &&
-                bayarSaatIni.status_pembayaran === 'Belum Dibayar') ||
-            (status_pembayaran === 'Dikembalikan' &&
-                bayarSaatIni.status_pembayaran === 'Sudah Dibayar');
+            status_pembayaran === 'Dikembalikan' &&
+            bayarSaatIni.status_pembayaran === 'Sudah Dibayar';
         if (!boleh) {
             return res.status(409).json({
                 success: false,
@@ -709,7 +698,7 @@ exports.uploadBuktiPembayaran = async (req, res) => {
         }
 
         const [rows] = await db.query(
-            `SELECT p.id, p.id_mahasiswa, p.status_pembayaran, p.status_pesanan, t.id_admin_pendaftar
+            `SELECT p.id, p.id_mahasiswa, p.status_pembayaran, p.status_pesanan, p.jumlah_penolakan, t.id_admin_pendaftar
              FROM pesanan p JOIN tenant t ON p.id_tenant = t.id WHERE p.id = ?`,
             [id]
         );
@@ -726,6 +715,14 @@ exports.uploadBuktiPembayaran = async (req, res) => {
             return res.status(409).json({
                 success: false,
                 message: 'Bukti pembayaran hanya dapat diunggah ulang jika bukti sebelumnya ditolak tenant'
+            });
+        }
+
+        // Batas pengiriman bukti: penolakan ke-3 berarti pesanan sudah dibatalkan, jadi tidak ada unggah ke-4
+        if ((order.jumlah_penolakan || 0) >= BATAS_PENOLAKAN) {
+            return res.status(409).json({
+                success: false,
+                message: `Batas pengiriman bukti pembayaran (${BATAS_PENOLAKAN} kali) sudah tercapai`
             });
         }
 
@@ -784,7 +781,7 @@ exports.uploadBuktiPembayaran = async (req, res) => {
 // Verifikasi pembayaran oleh tenant
 // aksi: 'valid' | 'minta_ulang' | 'tolak_batal'
 // ---------------------------------------------------------------
-const BATAS_PENOLAKAN = 3; // setelah 3x bukti ditolak, pesanan otomatis dibatalkan
+const BATAS_PENOLAKAN = 3; // maksimal 3x pengiriman bukti; bukti ke-3 tidak bisa diminta unggah ulang lagi
 
 exports.verifikasiPembayaran = async (req, res) => {
     try {
@@ -843,32 +840,27 @@ exports.verifikasiPembayaran = async (req, res) => {
             judul = 'Pembayaran Terverifikasi ✅';
             pesan = `Pembayaran pesanan #${id} telah diverifikasi oleh ${order.nama_tenant}. Pesanan Anda akan segera diproses.`;
         } else if (aksi === 'minta_ulang') {
-            const jumlah = (order.jumlah_penolakan || 0) + 1;
-            if (jumlah >= BATAS_PENOLAKAN) {
-                await terapkan(
-                    `UPDATE pesanan
-                     SET status_pembayaran = 'Bukti Ditolak', status_pesanan = 'Dibatalkan',
-                         jumlah_penolakan = ?, catatan_verifikasi = ?,
-                         diverifikasi_oleh = ?, waktu_verifikasi = NOW(), waktu_perubahan_status = NOW()
-                     WHERE id = ?`,
-                    [jumlah, alasan, verifikator, id]
-                );
-                hasil = 'Dibatalkan';
-                judul = 'Pesanan Dibatalkan ❌';
-                tipe = 'dibatalkan';
-                pesan = `Bukti pembayaran pesanan #${id} ditolak ${BATAS_PENOLAKAN} kali sehingga pesanan dibatalkan.${alasan ? ` Alasan terakhir: ${alasan}` : ''}`;
-            } else {
-                await terapkan(
-                    `UPDATE pesanan
-                     SET status_pembayaran = 'Bukti Ditolak', jumlah_penolakan = ?, catatan_verifikasi = ?,
-                         diverifikasi_oleh = ?, waktu_verifikasi = NOW(), waktu_perubahan_status = NOW()
-                     WHERE id = ?`,
-                    [jumlah, alasan, verifikator, id]
-                );
-                hasil = 'Bukti Ditolak';
-                judul = 'Bukti Pembayaran Ditolak ⚠️';
-                pesan = `Bukti pembayaran pesanan #${id} ditolak${alasan ? `: ${alasan}` : '.'} Silakan unggah ulang bukti yang benar (kesempatan ke-${jumlah} dari ${BATAS_PENOLAKAN}).`;
+            // Pengiriman bukti ke-3 (penolakan sudah 2x) adalah kesempatan TERAKHIR:
+            // tenant hanya boleh menerima (valid) atau menolak & membatalkan, tidak boleh minta unggah ulang lagi.
+            const sudahDitolak = order.jumlah_penolakan || 0;
+            if (sudahDitolak >= BATAS_PENOLAKAN - 1) {
+                return res.status(409).json({
+                    success: false,
+                    message: `Ini bukti ke-${BATAS_PENOLAKAN} (kesempatan terakhir). Pembeli tidak bisa diminta unggah ulang lagi: verifikasi jika valid, atau tolak & batalkan pesanan jika tidak valid.`
+                });
             }
+            const jumlah = sudahDitolak + 1;
+            await terapkan(
+                `UPDATE pesanan
+                 SET status_pembayaran = 'Bukti Ditolak', jumlah_penolakan = ?, catatan_verifikasi = ?,
+                     diverifikasi_oleh = ?, waktu_verifikasi = NOW(), waktu_perubahan_status = NOW()
+                 WHERE id = ?`,
+                [jumlah, alasan, verifikator, id]
+            );
+            hasil = 'Bukti Ditolak';
+            judul = 'Bukti Pembayaran Ditolak ⚠️';
+            const sisa = BATAS_PENOLAKAN - jumlah;
+            pesan = `Bukti pembayaran pesanan #${id} ditolak${alasan ? `: ${alasan}` : '.'} Silakan unggah ulang bukti yang benar. ${sisa === 1 ? 'Ini kesempatan TERAKHIR: jika bukti berikutnya tidak valid, pesanan dibatalkan.' : `Sisa kesempatan unggah: ${sisa} kali.`}`;
         } else {
             await terapkan(
                 `UPDATE pesanan
@@ -919,7 +911,7 @@ exports.verifikasiPembayaran = async (req, res) => {
 };
 
 // ---------------------------------------------------------------
-// Pembatalan otomatis: pesanan non-tunai yang tidak kunjung beres
+// Pembatalan otomatis: pesanan yang pembayarannya tidak kunjung beres
 // pembayarannya dalam BATAS_MENIT menit sejak perubahan terakhir
 // ---------------------------------------------------------------
 const BATAS_MENIT_VERIFIKASI = 30;
@@ -974,7 +966,7 @@ exports.getTenantSummary = async (req, res) => {
             `SELECT 
                 COUNT(*) as total_pesanan,
                                 COALESCE(SUM(CASE WHEN status_pesanan != 'Dibatalkan' AND status_pembayaran = 'Sudah Dibayar' THEN total_harga ELSE 0 END), 0) as total_pendapatan,
-                SUM(CASE WHEN status_pesanan = 'Menunggu' AND (metode_pembayaran = 'Tunai' OR status_pembayaran = 'Sudah Dibayar') THEN 1 ELSE 0 END) as perlu_dimasak,
+                SUM(CASE WHEN status_pesanan = 'Menunggu' AND status_pembayaran = 'Sudah Dibayar' THEN 1 ELSE 0 END) as perlu_dimasak,
                 SUM(CASE WHEN status_pesanan = 'Diproses' THEN 1 ELSE 0 END) as antrean_diproses,
                 SUM(CASE WHEN status_pesanan = 'Siap Diambil' THEN 1 ELSE 0 END) as siap_diambil,
                 SUM(CASE WHEN status_pesanan = 'Selesai' THEN 1 ELSE 0 END) as order_selesai,
@@ -1011,5 +1003,16 @@ exports.getTenantSummary = async (req, res) => {
             message: 'Gagal mengambil ringkasan tenant',
             error: error.message
         });
+    }
+};
+// Statistik & laporan keuangan tenant (grafik harian, metode bayar, menu terlaris, transaksi)
+// GET /api/pesanan/tenant/:id_tenant/statistik?hari=7|14|30
+exports.getTenantStatistik = async (req, res) => {
+    try {
+        const data = await statistikService.getStatistikTenant(req.params.id_tenant, req.query.hari);
+        res.status(200).json({ success: true, data });
+    } catch (error) {
+        console.error('Error saat mengambil statistik tenant:', error);
+        res.status(500).json({ success: false, message: 'Gagal mengambil statistik tenant', error: error.message });
     }
 };

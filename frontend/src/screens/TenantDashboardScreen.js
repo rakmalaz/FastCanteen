@@ -20,7 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import API, { resolveBuktiUrl } from '../api/axios';
 import FotoMenu from '../components/FotoMenu';
-import PushNotifikasiCard from '../components/PushNotifikasiCard';
+import StatistikPanel from '../components/StatistikPanel';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../constants/theme';
 
@@ -39,7 +39,10 @@ export default function TenantDashboardScreen({ navigation }) {
   const tenantLocation =
     user?.tenant?.lokasi_stan || 'Kantin Belakang Lt. 1 UINSA Kampus 2';
 
-  const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'menus'
+  const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'menus' | 'keuangan'
+  const [statistik, setStatistik] = useState(null);
+  const [statistikHari, setStatistikHari] = useState(7);
+  const [statistikLoading, setStatistikLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState('Semua'); // 'Semua' | 'Diproses' | 'Siap Diambil' | 'Selesai'
   const [orders, setOrders] = useState([]);
   const [menus, setMenus] = useState([]);
@@ -109,6 +112,27 @@ export default function TenantDashboardScreen({ navigation }) {
     const timer = setInterval(fetchData, 10000);
     return () => clearInterval(timer);
   }, [tenantId]);
+
+  // Statistik & keuangan: dimuat saat tab Keuangan dibuka / periode diganti, lalu disegarkan berkala
+  const fetchStatistik = async () => {
+    if (!tenantId) return;
+    setStatistikLoading(true);
+    try {
+      const res = await API.get(`/pesanan/tenant/${tenantId}/statistik?hari=${statistikHari}`);
+      if (res.data.success) setStatistik(res.data.data);
+    } catch (err) {
+      console.warn('Gagal memuat statistik tenant:', err.message);
+    } finally {
+      setStatistikLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab !== 'keuangan') return undefined;
+    fetchStatistik();
+    const timer = setInterval(fetchStatistik, 30000);
+    return () => clearInterval(timer);
+  }, [activeTab, statistikHari, tenantId]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -257,7 +281,7 @@ export default function TenantDashboardScreen({ navigation }) {
         id_tenant: tenantId,
         nama_menu: newMenuNama.trim(),
         harga: hargaAngka,
-        foto_base64: newMenuFoto ? newMenuFoto.base64 : undefined,
+                foto_base64: newMenuFoto ? newMenuFoto.base64 : undefined,
         foto_mime: newMenuFoto ? newMenuFoto.mimeType : undefined,
         status_tersedia: 'tersedia',
       };
@@ -298,11 +322,13 @@ export default function TenantDashboardScreen({ navigation }) {
 
   // ---------- Verifikasi pembayaran ----------
   const perluVerifikasi = (o) =>
-    o.metode_pembayaran !== 'Tunai' &&
     o.status_pembayaran === 'Menunggu Verifikasi' &&
     (o.status_pesanan || o.status) === 'Menunggu';
 
   const jumlahPerluVerifikasi = orders.filter(perluVerifikasi).length;
+
+  // Bukti ke-3 (sudah ditolak 2x) = kesempatan terakhir: tidak boleh minta unggah ulang lagi
+  const buktiTerakhir = (rejectOrder?.jumlah_penolakan || 0) >= 2;
 
   // Bukti contoh (placeholder) dari versi lama aplikasi bukan bukti pembayaran sungguhan
   const adaBuktiAsli = (nilai) => !!nilai && !/placeholder\.com/i.test(nilai);
@@ -334,7 +360,7 @@ export default function TenantDashboardScreen({ navigation }) {
         } else if (aksi === 'minta_ulang') {
           Alert.alert(
             'Pesanan Dibatalkan',
-            `Bukti pembayaran pesanan #${orderId} sudah ditolak 3 kali, sehingga pesanan dibatalkan otomatis.`,
+            `Bukti pembayaran pesanan #${orderId} sudah ditolak 3 kali, sehingga pesanan dibatalkan.`,
             [{ text: 'OK' }],
             { tone: 'danger' }
           );
@@ -420,8 +446,6 @@ export default function TenantDashboardScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      <PushNotifikasiCard />
-
       {/* Ringkasan Penjualan Hari Ini (US-13) */}
       <View style={styles.summaryContainer}>
         <View style={styles.summaryCard}>
@@ -487,6 +511,25 @@ export default function TenantDashboardScreen({ navigation }) {
             ]}
           >
             Kelola Menu ({menus.length})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.mainTabBtn, activeTab === 'keuangan' && styles.mainTabBtnActive]}
+          onPress={() => setActiveTab('keuangan')}
+        >
+          <Ionicons
+            name="stats-chart-outline"
+            size={16}
+            color={activeTab === 'keuangan' ? COLORS.cardBackground : COLORS.textBody}
+          />
+          <Text
+            style={[
+              styles.mainTabText,
+              activeTab === 'keuangan' && styles.mainTabTextActive,
+            ]}
+          >
+            Keuangan
           </Text>
         </TouchableOpacity>
       </View>
@@ -563,10 +606,9 @@ export default function TenantDashboardScreen({ navigation }) {
                 const isSiap = stPesanan === 'Siap Diambil';
                 const isSelesai = stPesanan === 'Selesai';
                 const isDibatalkan = stPesanan === 'Dibatalkan';
-                const isTunai = item.metode_pembayaran === 'Tunai';
-                const menungguVerif = !isTunai && stBayar === 'Menunggu Verifikasi' && isMenunggu;
-                const buktiDitolak = !isTunai && stBayar === 'Bukti Ditolak' && isMenunggu;
-                const terkunci = !isTunai && stBayar !== 'Sudah Dibayar' && isMenunggu; // belum boleh dimasak
+                const menungguVerif = stBayar === 'Menunggu Verifikasi' && isMenunggu;
+                const buktiDitolak = stBayar === 'Bukti Ditolak' && isMenunggu;
+                const terkunci = stBayar !== 'Sudah Dibayar' && isMenunggu; // belum boleh dimasak
 
                 return (
                   <View style={styles.orderCard}>
@@ -700,8 +742,7 @@ export default function TenantDashboardScreen({ navigation }) {
                     </View>
 
                     {/* Bukti Pembayaran (US-07) */}
-                    {item.metode_pembayaran !== 'Tunai' &&
-                      (adaBuktiAsli(item.bukti_pembayaran) ? (
+                    {adaBuktiAsli(item.bukti_pembayaran) ? (
                         <TouchableOpacity
                           style={styles.buktiBtn}
                           onPress={() => setBuktiModalUri(resolveBuktiUrl(item.bukti_pembayaran))}
@@ -712,7 +753,7 @@ export default function TenantDashboardScreen({ navigation }) {
                         </TouchableOpacity>
                       ) : (
                         <Text style={styles.buktiMissing}>Belum ada bukti pembayaran</Text>
-                      ))}
+                      )}
 
                     {/* Verifikasi Pembayaran */}
                     {menungguVerif && (
@@ -746,7 +787,8 @@ export default function TenantDashboardScreen({ navigation }) {
                     )}
                     {buktiDitolak && (
                       <Text style={styles.verifWaiting}>
-                        Menunggu pembeli mengunggah ulang bukti ({item.jumlah_penolakan || 0}/3 ditolak)
+                        Menunggu pembeli mengunggah ulang bukti ke-{(item.jumlah_penolakan || 0) + 1} dari 3
+                        ({item.jumlah_penolakan || 0}x ditolak)
                         {item.catatan_verifikasi ? `. Alasan: ${item.catatan_verifikasi}` : ''}
                       </Text>
                     )}
@@ -840,6 +882,25 @@ export default function TenantDashboardScreen({ navigation }) {
         </>
       )}
 
+      {/* Konten Tab Keuangan & Statistik */}
+      {activeTab === 'keuangan' && (
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 40 }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={statistikLoading && !!statistik} onRefresh={fetchStatistik} colors={[COLORS.primaryDark]} />
+          }
+        >
+          <StatistikPanel
+            data={statistik}
+            loading={statistikLoading}
+            hari={statistikHari}
+            onChangeHari={setStatistikHari}
+          />
+        </ScrollView>
+      )}
+
       {/* Konten Tab Kelola Menu (US-09) */}
       {activeTab === 'menus' && (
         <View style={styles.menuTabContainer}>
@@ -860,7 +921,7 @@ export default function TenantDashboardScreen({ navigation }) {
             renderItem={({ item }) => {
               const isTersedia = item.status_tersedia === 'tersedia';
               return (
-                <View style={styles.tenantMenuCard}>
+                                <View style={styles.tenantMenuCard}>
                   <FotoMenu foto={item.foto} style={styles.tenantMenuThumb} />
                   <View style={styles.tenantMenuInfo}>
                     <Text style={styles.tenantMenuName}>{item.nama_menu}</Text>
@@ -952,7 +1013,7 @@ export default function TenantDashboardScreen({ navigation }) {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Foto Menu (Opsional)</Text>
+                                <Text style={styles.inputLabel}>Foto Menu (Opsional)</Text>
                 <TouchableOpacity
                   style={styles.fotoPickerBox}
                   onPress={async () => {
@@ -1063,26 +1124,29 @@ export default function TenantDashboardScreen({ navigation }) {
               <View style={styles.rejectHint}>
                 <Ionicons name="information-circle-outline" size={16} color={COLORS.textSecondary} />
                 <Text style={styles.rejectHintText}>
-                  Pembeli diberi kesempatan mengunggah bukti baru (maksimal 3 kali penolakan). Pilih
-                  "Tolak & Batalkan" hanya jika bukti jelas tidak valid.
+                  {buktiTerakhir
+                    ? 'Ini bukti ke-3 (kesempatan terakhir), sehingga pembeli tidak bisa diminta unggah ulang lagi. Jika bukti masih tidak valid, tolak dan batalkan pesanan.'
+                    : `Ini bukti ke-${(rejectOrder?.jumlah_penolakan || 0) + 1} dari maksimal 3. Pembeli bisa diminta mengunggah bukti baru. Pilih "Tolak & Batalkan" hanya jika bukti jelas tidak valid.`}
                 </Text>
               </View>
 
-              <TouchableOpacity
-                style={[styles.rejectAskBtn, styles.rejectBtnRow]}
-                disabled={verifLoading}
-                onPress={() => kirimVerifikasi(rejectOrder.id, 'minta_ulang', rejectNote)}
-                activeOpacity={0.85}
-              >
-                {verifLoading ? (
-                  <ActivityIndicator color={COLORS.cardBackground} />
-                ) : (
-                  <>
-                    <Ionicons name="cloud-upload-outline" size={18} color={COLORS.cardBackground} />
-                    <Text style={styles.rejectAskText}>Minta Unggah Ulang</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              {!buktiTerakhir && (
+                <TouchableOpacity
+                  style={[styles.rejectAskBtn, styles.rejectBtnRow]}
+                  disabled={verifLoading}
+                  onPress={() => kirimVerifikasi(rejectOrder.id, 'minta_ulang', rejectNote)}
+                  activeOpacity={0.85}
+                >
+                  {verifLoading ? (
+                    <ActivityIndicator color={COLORS.cardBackground} />
+                  ) : (
+                    <>
+                      <Ionicons name="cloud-upload-outline" size={18} color={COLORS.cardBackground} />
+                      <Text style={styles.rejectAskText}>Minta Unggah Ulang</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity
                 style={[styles.rejectCancelOrderBtn, styles.rejectBtnRow]}
@@ -1668,7 +1732,7 @@ const styles = StyleSheet.create({
   tenantMenuInfo: {
     flex: 1,
   },
-  tenantMenuThumb: {
+    tenantMenuThumb: {
     width: 56,
     height: 56,
     borderRadius: RADIUS.sm,

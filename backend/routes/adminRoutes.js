@@ -17,6 +17,10 @@ router.get('/tenants', adminController.getTenants);
 router.post('/tenants', adminController.registerTenant);
 router.delete('/tenants/:id', adminController.deleteTenant);
 
+// Statistik: peringkat semua tenant & detail per tenant
+router.get('/statistik', adminController.getStatistikSemuaTenant);
+router.get('/tenants/:id/statistik', adminController.getStatistikTenant);
+
 // Monitoring Pesanan & Mahasiswa
 router.get('/orders', adminController.getAllOrders);
 router.get('/students', adminController.getAllStudents);

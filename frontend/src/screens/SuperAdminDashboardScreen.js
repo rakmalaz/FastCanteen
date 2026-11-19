@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import API from '../api/axios';
+import StatistikPanel from '../components/StatistikPanel';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../constants/theme';
 
@@ -34,6 +35,11 @@ export default function SuperAdminDashboardScreen({ navigation }) {
   const [selectedOrderFilter, setSelectedOrderFilter] = useState('Semua');
 
   // Modal Register Tenant
+  const [rankingData, setRankingData] = useState(null); // peringkat & tenant tertinggi
+  const [statTenant, setStatTenant] = useState(null); // tenant yang sedang dilihat statistiknya
+  const [statDetail, setStatDetail] = useState(null);
+  const [statHari, setStatHari] = useState(7);
+  const [statLoading, setStatLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formNamaPemilik, setFormNamaPemilik] = useState('');
   const [formNamaTenant, setFormNamaTenant] = useState('');
@@ -45,11 +51,12 @@ export default function SuperAdminDashboardScreen({ navigation }) {
 
   const fetchDashboardData = async () => {
     try {
-      const [overviewRes, tenantsRes, ordersRes, studentsRes] = await Promise.all([
+      const [overviewRes, tenantsRes, ordersRes, studentsRes, rankingRes] = await Promise.all([
         API.get('/admin/overview'),
         API.get('/admin/tenants'),
         API.get('/admin/orders'),
         API.get('/admin/students'),
+        API.get('/admin/statistik'),
       ]);
 
       if (overviewRes.data.success) {
@@ -64,6 +71,9 @@ export default function SuperAdminDashboardScreen({ navigation }) {
       if (studentsRes.data.success) {
         setStudentsList(studentsRes.data.data);
       }
+      if (rankingRes.data.success) {
+        setRankingData(rankingRes.data.data);
+      }
     } catch (err) {
       console.warn('Gagal memuat data Super Admin Dashboard:', err.message);
     } finally {
@@ -75,6 +85,31 @@ export default function SuperAdminDashboardScreen({ navigation }) {
   useEffect(() => {
     fetchDashboardData();
   }, []);
+
+  // Statistik detail satu tenant (modal)
+  const loadStatDetail = async (tenantId, hari) => {
+    setStatLoading(true);
+    try {
+      const res = await API.get(`/admin/tenants/${tenantId}/statistik?hari=${hari}`);
+      if (res.data.success) setStatDetail(res.data.data);
+    } catch (err) {
+      Alert.alert('Gagal', err.response?.data?.message || 'Statistik tenant gagal dimuat.');
+    } finally {
+      setStatLoading(false);
+    }
+  };
+
+  const bukaStatTenant = (tenant) => {
+    setStatTenant({ id: tenant.id, nama_tenant: tenant.nama_tenant, lokasi_stan: tenant.lokasi_stan });
+    setStatDetail(null);
+    setStatHari(7);
+    loadStatDetail(tenant.id, 7);
+  };
+
+  const gantiStatHari = (hari) => {
+    setStatHari(hari);
+    if (statTenant) loadStatDetail(statTenant.id, hari);
+  };
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -328,6 +363,23 @@ export default function SuperAdminDashboardScreen({ navigation }) {
               Mahasiswa ({studentsList.length})
             </Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'statistik' && styles.tabItemActive]}
+            onPress={() => setActiveTab('statistik')}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name="stats-chart-outline"
+              size={16}
+              color={activeTab === 'statistik' ? COLORS.primaryDark : COLORS.textSecondary}
+            />
+            <Text
+              style={[styles.tabText, activeTab === 'statistik' && styles.tabTextActive]}
+            >
+              Statistik Stan
+            </Text>
+          </TouchableOpacity>
         </ScrollView>
       </View>
 
@@ -397,6 +449,29 @@ export default function SuperAdminDashboardScreen({ navigation }) {
                   <Text style={styles.metricSub}>Perputaran Kantin</Text>
                 </View>
               </View>
+
+              {/* Stan dengan Omzet Tertinggi */}
+              {rankingData?.tertinggi?.omzet && (
+                <TouchableOpacity
+                  style={styles.topTenantBanner}
+                  onPress={() => bukaStatTenant(rankingData.tertinggi.omzet)}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.topTenantIcon}>
+                    <Ionicons name="trophy" size={22} color={COLORS.brownDark} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.topTenantLabel}>Omzet Tertinggi</Text>
+                    <Text style={styles.topTenantName} numberOfLines={1}>
+                      {rankingData.tertinggi.omzet.nama_tenant}
+                    </Text>
+                    <Text style={styles.topTenantSub}>
+                      {formatRupiah(rankingData.tertinggi.omzet.total_omzet)} · {rankingData.tertinggi.omzet.pesanan_berbayar} pesanan berbayar
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={COLORS.brownDark} />
+                </TouchableOpacity>
+              )}
 
               {/* Status Pesanan Realtime */}
               <View style={styles.cardSection}>
@@ -600,6 +675,14 @@ export default function SuperAdminDashboardScreen({ navigation }) {
                   {/* Footer Tombol Hapus */}
                   <View style={styles.tenantCardFooter}>
                     <TouchableOpacity
+                      style={styles.statTenantBtn}
+                      onPress={() => bukaStatTenant(t)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="stats-chart" size={14} color={COLORS.primaryDark} />
+                      <Text style={styles.statTenantBtnText}>Lihat Statistik</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
                       style={styles.deleteTenantBtn}
                       onPress={() => handleDeleteTenant(t)}
                       activeOpacity={0.7}
@@ -610,6 +693,84 @@ export default function SuperAdminDashboardScreen({ navigation }) {
                   </View>
                 </View>
               ))}
+            </View>
+          )}
+
+          {/* ===================== TAB: STATISTIK & PERINGKAT STAN ===================== */}
+          {activeTab === 'statistik' && (
+            <View>
+              <Text style={styles.sectionTitle}>Statistik & Peringkat Stan</Text>
+              <Text style={[styles.sectionSubtitle, { marginBottom: 12 }]}>
+                Total omzet semua stan: {formatRupiah(rankingData?.total_omzet_semua)}
+              </Text>
+
+              {/* Juara tiap kategori */}
+              {[
+                { kunci: 'omzet', judul: 'Omzet Tertinggi', ikon: 'cash', nilai: (r) => formatRupiah(r.total_omzet) },
+                { kunci: 'pesanan', judul: 'Pesanan Terbanyak', ikon: 'receipt', nilai: (r) => `${r.pesanan_berbayar} pesanan` },
+                { kunci: 'porsi_terjual', judul: 'Porsi Terjual Terbanyak', ikon: 'fast-food', nilai: (r) => `${r.porsi_terjual} porsi` },
+                { kunci: 'omzet_7_hari', judul: 'Omzet 7 Hari Tertinggi', ikon: 'trending-up', nilai: (r) => formatRupiah(r.omzet_7_hari) },
+              ].map((k) => {
+                const juara = rankingData?.tertinggi?.[k.kunci];
+                return (
+                  <TouchableOpacity
+                    key={k.kunci}
+                    style={styles.topTenantBanner}
+                    disabled={!juara}
+                    onPress={() => juara && bukaStatTenant(juara)}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.topTenantIcon}>
+                      <Ionicons name={k.ikon} size={20} color={COLORS.brownDark} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.topTenantLabel}>{k.judul}</Text>
+                      <Text style={styles.topTenantName} numberOfLines={1}>
+                        {juara ? juara.nama_tenant : 'Belum ada data'}
+                      </Text>
+                      {juara && <Text style={styles.topTenantSub}>{k.nilai(juara)}</Text>}
+                    </View>
+                    {juara && <Ionicons name="chevron-forward" size={20} color={COLORS.brownDark} />}
+                  </TouchableOpacity>
+                );
+              })}
+
+              {/* Peringkat seluruh stan berdasarkan omzet */}
+              <View style={[styles.cardSection, { marginTop: 4 }]}>
+                <Text style={styles.sectionTitle}>Peringkat Omzet Stan</Text>
+                <Text style={[styles.sectionSubtitle, { marginBottom: 8 }]}>Ketuk stan untuk melihat statistik lengkap</Text>
+                {(rankingData?.ranking || []).length === 0 ? (
+                  <Text style={styles.sectionSubtitle}>Belum ada stan terdaftar.</Text>
+                ) : (
+                  rankingData.ranking.map((r) => {
+                    const maks = Math.max(rankingData.ranking[0]?.total_omzet || 0, 1);
+                    return (
+                      <TouchableOpacity
+                        key={r.id}
+                        style={styles.rankRow}
+                        onPress={() => bukaStatTenant(r)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.rankNo, r.peringkat === 1 && styles.rankNoFirst]}>
+                          <Text style={styles.rankNoText}>{r.peringkat}</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <View style={styles.rankTop}>
+                            <Text style={styles.rankName} numberOfLines={1}>{r.nama_tenant}</Text>
+                            <Text style={styles.rankOmzet}>{formatRupiah(r.total_omzet)}</Text>
+                          </View>
+                          <View style={styles.rankTrack}>
+                            <View style={[styles.rankFill, { width: `${Math.max((r.total_omzet / maks) * 100, 2)}%` }]} />
+                          </View>
+                          <Text style={styles.rankSub}>
+                            {r.pesanan_berbayar} pesanan berbayar · {r.porsi_terjual} porsi · 7 hari: {formatRupiah(r.omzet_7_hari)}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })
+                )}
+              </View>
             </View>
           )}
 
@@ -767,6 +928,37 @@ export default function SuperAdminDashboardScreen({ navigation }) {
       )}
 
       {/* ===================== MODAL DAFTARKAN TENANT BARU ===================== */}
+      {/* Modal Statistik Detail per Tenant */}
+      <Modal
+        visible={!!statTenant}
+        animationType="slide"
+        onRequestClose={() => setStatTenant(null)}
+      >
+        <View style={styles.statModalScreen}>
+          <View style={styles.statModalHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.statModalTitle} numberOfLines={1}>
+                Statistik · {statTenant?.nama_tenant}
+              </Text>
+              {!!statTenant?.lokasi_stan && (
+                <Text style={styles.statModalSub} numberOfLines={1}>{statTenant.lokasi_stan}</Text>
+              )}
+            </View>
+            <TouchableOpacity onPress={() => setStatTenant(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="close" size={26} color={COLORS.textSecondary} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 40 }}>
+            <StatistikPanel
+              data={statDetail}
+              loading={statLoading}
+              hari={statHari}
+              onChangeHari={gantiStatHari}
+            />
+          </ScrollView>
+        </View>
+      </Modal>
+
       <Modal
         visible={isModalOpen}
         animationType="slide"
@@ -1411,6 +1603,75 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     marginTop: SPACING.sm,
   },
+  statTenantBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    gap: 4,
+    marginRight: 'auto',
+  },
+  statTenantBtnText: {
+    fontSize: 11,
+    color: COLORS.primaryDark,
+    fontWeight: '700',
+  },
+  topTenantBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: COLORS.statusWaitingBg,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: 10,
+  },
+  topTenantIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.orange,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topTenantLabel: { fontSize: 11, fontWeight: '700', color: COLORS.goldenBrown },
+  topTenantName: { fontSize: 15, fontWeight: '800', color: COLORS.brownDark },
+  topTenantSub: { fontSize: 12, color: COLORS.brownDark, marginTop: 1 },
+  rankRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.inactiveElement,
+  },
+  rankNo: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: COLORS.badgeBackground,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rankNoFirst: { backgroundColor: COLORS.orange },
+  rankNoText: { fontSize: 12, fontWeight: '800', color: COLORS.brownDark },
+  rankTop: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
+  rankName: { flex: 1, fontSize: 14, fontWeight: '700', color: COLORS.textPrimary },
+  rankOmzet: { fontSize: 13, fontWeight: '800', color: COLORS.primaryDark },
+  rankTrack: { height: 7, borderRadius: 4, backgroundColor: COLORS.inactiveTab, marginTop: 5, overflow: 'hidden' },
+  rankFill: { height: '100%', backgroundColor: COLORS.primary, borderRadius: 4 },
+  rankSub: { fontSize: 11, color: COLORS.textSecondary, marginTop: 4 },
+  statModalScreen: { flex: 1, backgroundColor: COLORS.backgroundMain },
+  statModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: Platform.OS === 'ios' ? 54 : 36,
+    paddingBottom: SPACING.md,
+    backgroundColor: COLORS.cardBackground,
+  },
+  statModalTitle: { fontSize: 17, fontWeight: '800', color: COLORS.textPrimary },
+  statModalSub: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   deleteTenantBtn: {
     flexDirection: 'row',
     alignItems: 'center',

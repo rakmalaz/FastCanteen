@@ -39,8 +39,8 @@ Aplikasi ini mencakup 3 peran pengguna (*multi-role*):
    - `id_mahasiswa` (FK ke `pengguna.id`)
    - `id_tenant` (FK ke `tenant.id`)
    - `total_harga` (DECIMAL)
-   - `metode_pembayaran` (`QRIS`, `Tunai`, dll.)
-   - `status_pembayaran` (`ENUM`: `'Belum Dibayar'`, `'Sudah Dibayar'`, `'Dikembalikan'`)
+   - `metode_pembayaran` (`QRIS`, `E-Wallet`)
+   - `status_pembayaran` (`ENUM`: `'Menunggu Verifikasi'`, `'Sudah Dibayar'`, `'Bukti Ditolak'`, `'Dikembalikan'`)
    - `status_pesanan` (`ENUM`: `'Menunggu'`, `'Diproses'`, `'Siap Diambil'`, `'Selesai'`, `'Dibatalkan'`)
    - `bukti_pembayaran`, `catatan`, `waktu_transaksi`, `waktu_perubahan_status`.
 5. **`detail_pesanan`**: `id_detail` (PK), `id_pesanan` (FK), `id_menu` (FK), `jumlah_pesanan`, `sub_harga`.
@@ -127,18 +127,24 @@ npx expo start -c
 
 - **QRIS**: layar checkout menampilkan kode QR (simulasi), total tagihan, dan tombol unggah bukti.
 - **E-Wallet**: layar checkout menampilkan nomor DANA / GoPay / ShopeePay beserta nama stan.
-- **Tunai**: status pembayaran tercatat *Belum Dibayar* sampai pembeli membayar di stan.
-- Untuk **QRIS dan E-Wallet**, pembeli wajib mengunggah screenshot bukti pembayaran. Server menolak pesanan non-tunai tanpa bukti (HTTP 400).
-- Setelah bukti diunggah, pesanan non-tunai berstatus **Menunggu Verifikasi**. Status ini ditentukan oleh server, bukan oleh aplikasi.
+- Pembayaran hanya melalui **QRIS dan E-Wallet** (pembayaran tunai sudah dihapus). Pembeli wajib mengunggah screenshot bukti pembayaran; server menolak pesanan tanpa bukti (HTTP 400).
+- Setelah bukti diunggah, pesanan berstatus **Menunggu Verifikasi**. Status ini ditentukan oleh server, bukan oleh aplikasi.
 - **Tenant memverifikasi** bukti dengan mencocokkan mutasi rekening atau e-wallet: *Pembayaran Valid* (status menjadi Sudah Dibayar), *Minta Unggah Ulang* (status Bukti Ditolak), atau *Tolak & Batalkan Pesanan*.
-- Pesanan non-tunai **tidak dapat diproses** (Diproses, Siap Diambil, Selesai) sebelum pembayarannya terverifikasi. Aturan ini ditegakkan di server.
-- Bukti yang ditolak dapat diunggah ulang oleh pembeli. Setelah **3 kali penolakan**, pesanan otomatis dibatalkan.
-- Pesanan non-tunai yang tidak terverifikasi dalam **30 menit** dibatalkan otomatis (`BATAS_MENIT_VERIFIKASI` di `backend/controllers/pesananController.js`).
-- Dashboard tenant memiliki filter **Perlu Verifikasi** beserta jumlahnya, dan pesanan yang perlu diverifikasi tampil paling atas.
-- Untuk database yang sudah berjalan, jalankan `backend/migrasi_verifikasi.sql` sekali di phpMyAdmin.
+- Pesanan **tidak dapat diproses** (Diproses, Siap Diambil, Selesai) sebelum pembayarannya terverifikasi. Aturan ini ditegakkan di server.
+- Bukti yang ditolak dapat diunggah ulang oleh pembeli, maksimal **3 kali pengiriman bukti**. Pada bukti ke-3 (kesempatan terakhir) tenant tidak bisa lagi meminta unggah ulang: hanya *Pembayaran Valid* atau *Tolak & Batalkan Pesanan*.
+- Pesanan yang pembayarannya tidak terverifikasi dalam **30 menit** dibatalkan otomatis (`BATAS_MENIT_VERIFIKASI` di `backend/controllers/pesananController.js`).
+- Dashboard tenant memiliki filter **Perlu Verifikasi** beserta jumlahnya, sedangkan daftar pesanan selalu berurutan dari yang **terbaru** ke terlama.
+- Untuk database yang sudah berjalan, jalankan `node backend/migrate_hapus_tunai.js` (pratinjau) lalu `node backend/migrate_hapus_tunai.js --lanjut` untuk menghapus data & status pembayaran tunai lama.
 - File bukti disimpan di `backend/uploads/` (JPG/PNG/WEBP, maks. 5 MB) dan hanya path-nya yang disimpan di database.
 - Tenant melihat bukti melalui tombol **Lihat Bukti Pembayaran** pada kartu pesanan di dashboard tenant.
 - Untuk mengganti kode QR simulasi dengan QRIS asli, ubah `QRIS_IMAGE` dan `EWALLET_ACCOUNTS` di bagian atas `frontend/src/screens/CartCheckoutScreen.js`.
+
+## 🔑 Lupa Kata Sandi
+
+- Di halaman login ketuk **Lupa kata sandi?**.
+- Langkah 1: masukkan email/NIM dan nomor HP yang terdaftar (`POST /api/auth/lupa-sandi/verifikasi`). Jika cocok, server memberi token reset sekali pakai yang berlaku 10 menit.
+- Langkah 2: buat kata sandi baru, minimal 6 karakter (`POST /api/auth/lupa-sandi/reset`). Token otomatis tidak berlaku setelah kata sandi diganti.
+- Percobaan verifikasi dibatasi 5 kali per 15 menit; pesan galat sengaja tidak membedakan "akun tidak ada" dan "HP salah".
 
 ## ⚠️ Keterbatasan & Rencana Pengembangan
 
@@ -146,4 +152,5 @@ npx expo start -c
 - **Pembayaran masih simulasi.** Belum terhubung ke payment gateway (misalnya Midtrans atau Xendit), sehingga uang yang masuk tidak diverifikasi otomatis.
 - **Belum ada autentikasi berbasis token (JWT).** Backend belum memeriksa identitas pemanggil API, sehingga aturan "hanya tenant pemilik yang boleh memverifikasi" baru terjaga lewat aplikasi, belum di server. Endpoint `PUT /api/pesanan/:id/status-pembayaran` juga masih terbuka. Rencana: menambahkan JWT, menentukan status pembayaran di server, dan membatasi perubahan status hanya untuk tenant pemilik pesanan.
 - **Kata sandi masih disimpan sebagai teks biasa.** Rencana: memakai hashing `bcrypt`.
-- **Kode unik pada nominal pembayaran** dan penanganan pesanan tunai yang tidak diambil (kode pengambilan, penghitung tidak diambil) direncanakan sebagai pengembangan lanjutan.
+- **Kode unik pada nominal pembayaran** direncanakan sebagai pengembangan lanjutan.
+- **Lupa kata sandi** memakai verifikasi email/NIM + nomor HP terdaftar (belum lewat email/OTP karena belum ada layanan pengiriman email/SMS). Akun Super Admin tidak bisa direset mandiri.

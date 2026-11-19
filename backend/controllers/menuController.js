@@ -251,6 +251,9 @@ exports.updateMenu = async (req, res) => {
             data: updated[0]
         });
     } catch (error) {
+        if (error.statusCode) {
+            return res.status(error.statusCode).json({ success: false, message: error.message });
+        }
         console.error('Error saat memperbarui menu:', error);
         res.status(500).json({
             success: false,

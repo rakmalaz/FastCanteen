@@ -19,6 +19,7 @@ router.get('/mahasiswa/:id_mahasiswa', wajibLogin, hanyaDiriSendiri('id_mahasisw
 // Antrean dan ringkasan milik tenant yang login
 router.get('/tenant/:id_tenant', wajibLogin, wajibPeran('tenant', 'admin'), stanSendiri('params', 'id_tenant'), pesananController.getPesananByTenant);
 router.get('/tenant/:id_tenant/ringkasan', wajibLogin, wajibPeran('tenant', 'admin'), stanSendiri('params', 'id_tenant'), pesananController.getTenantSummary);
+router.get('/tenant/:id_tenant/statistik', wajibLogin, wajibPeran('tenant', 'admin'), stanSendiri('params', 'id_tenant'), pesananController.getTenantStatistik);
 
 // Detail satu pesanan (mahasiswa pemesan atau tenant pemilik stan)
 router.get('/:id', wajibLogin, pesananSendiri('mahasiswa', 'tenant', 'admin'), pesananController.getPesananById);

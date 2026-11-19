@@ -170,6 +170,15 @@ export default function LoginScreen({ navigation }) {
             </View>
           </View>
 
+          {/* Tautan Lupa Kata Sandi */}
+          <TouchableOpacity
+            style={styles.forgotLink}
+            onPress={() => navigation.navigate('LupaSandi')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.forgotLinkText}>Lupa kata sandi?</Text>
+          </TouchableOpacity>
+
           {/* Tombol Masuk */}
           <TouchableOpacity
             style={styles.loginButton}
@@ -280,6 +289,17 @@ export default function LoginScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  forgotLink: {
+    alignSelf: 'flex-end',
+    marginTop: -SPACING.xs,
+    marginBottom: SPACING.md,
+    paddingVertical: 4,
+  },
+  forgotLinkText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primaryDark,
+  },
   container: {
     flex: 1,
     backgroundColor: COLORS.backgroundMain,

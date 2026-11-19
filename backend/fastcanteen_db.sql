@@ -59,7 +59,6 @@ INSERT INTO `detail_pesanan` (`id_detail`, `id_pesanan`, `id_menu`, `jumlah_pesa
 (13, 11, 12, 1, 8000.00),
 (14, 12, 12, 1, 8000.00),
 (15, 13, 6, 1, 12000.00),
-(16, 14, 11, 1, 5000.00),
 (17, 15, 12, 1, 8000.00),
 (18, 16, 8, 1, 14000.00),
 (19, 17, 6, 1, 12000.00),
@@ -68,9 +67,7 @@ INSERT INTO `detail_pesanan` (`id_detail`, `id_pesanan`, `id_menu`, `jumlah_pesa
 (22, 20, 12, 1, 8000.00),
 (23, 21, 12, 1, 8000.00),
 (24, 22, 12, 1, 8000.00),
-(25, 23, 12, 1, 8000.00),
-(26, 24, 12, 1, 8000.00),
-(27, 25, 11, 1, 5000.00);
+(25, 23, 12, 1, 8000.00);
 
 -- --------------------------------------------------------
 
@@ -143,7 +140,6 @@ INSERT INTO `notifikasi` (`id`, `id_penerima`, `id_pengirim`, `id_pesanan`, `jud
 (11, 5, 2, 11, 'Pesanan Baru Masuk! 🛎️', 'Pesanan #11 dari Rayhan Akmal Azhari sebesar Rp 8.000 telah masuk. Mohon segera diproses.', 'pesanan_baru', 0, '2026-11-05 11:26:09'),
 (12, 5, 2, 12, 'Pesanan Baru Masuk! 🛎️', 'Pesanan #12 dari Rayhan Akmal Azhari sebesar Rp 8.000 telah masuk. Mohon segera diproses.', 'pesanan_baru', 0, '2026-11-05 11:33:19'),
 (13, 4, 2, 13, 'Pesanan Baru - Perlu Verifikasi 🧾', 'Pesanan #13 dari Rayhan Akmal Azhari sebesar Rp 12.000 menunggu verifikasi pembayaran. Cek bukti dan mutasi Anda.', 'pesanan_baru', 0, '2026-11-05 22:31:33'),
-(14, 5, 2, 14, 'Pesanan Baru Masuk! 🛎️', 'Pesanan #14 dari Rayhan Akmal Azhari sebesar Rp 5.000 telah masuk. Mohon segera diproses.', 'pesanan_baru', 0, '2026-11-05 22:31:52'),
 (15, 2, 3, 10, 'Pesanan Sedang Dimasak 👨‍🍳', 'Pesanan #10 Anda sedang dimasak oleh Kantin Mbak Siti (Ayam Geprek & Soto). Mohon ditunggu ya!', 'status_diproses', 0, '2026-11-05 22:33:13'),
 (16, 2, 3, 10, 'Makanan Siap! Segera Ambil 🎉', 'Pesanan #10 sudah matang dan siap diambil di stan Kantin Mbak Siti (Ayam Geprek & Soto).', 'siap_diambil', 0, '2026-11-05 22:33:18'),
 (17, 1, 3, 2, 'Pesanan Sedang Dimasak 👨‍🍳', 'Pesanan #2 Anda sedang dimasak oleh Kantin Mbak Siti (Ayam Geprek & Soto). Mohon ditunggu ya!', 'status_diproses', 0, '2026-11-05 22:33:27'),
@@ -176,12 +172,8 @@ INSERT INTO `notifikasi` (`id`, `id_penerima`, `id_pengirim`, `id_pesanan`, `jud
 (44, 2, 8, 20, 'Pesanan Dibatalkan Otomatis ⏰', 'Pesanan #20 dibatalkan karena pembayaran tidak terverifikasi dalam 30 menit.', 'dibatalkan', 0, '2026-11-09 03:10:02'),
 (45, 8, 9, 22, 'Pesanan Baru - Perlu Verifikasi 🧾', 'Pesanan #22 dari Nazril Febry Fadli sebesar Rp 8.000 menunggu verifikasi pembayaran. Cek bukti dan mutasi Anda.', 'pesanan_baru', 0, '2026-11-11 09:22:55'),
 (46, 8, 9, 23, 'Pesanan Baru - Perlu Verifikasi 🧾', 'Pesanan #23 dari Nazril Febry Fadli sebesar Rp 8.000 menunggu verifikasi pembayaran. Cek bukti dan mutasi Anda.', 'pesanan_baru', 0, '2026-11-11 09:23:08'),
-(47, 8, 9, 24, 'Pesanan Baru Masuk! 🛎️', 'Pesanan #24 dari Nazril Febry Fadli sebesar Rp 8.000 telah masuk. Mohon segera diproses.', 'pesanan_baru', 0, '2026-11-11 09:23:18'),
 (48, 9, 8, 23, 'Bukti Pembayaran Ditolak ⚠️', 'Bukti pembayaran pesanan #23 ditolak: Gambar buram atau tidak jelas Silakan unggah ulang bukti yang benar (kesempatan ke-1 dari 3).', 'info', 0, '2026-11-11 09:24:05'),
 (49, 9, 8, 22, 'Pesanan Dibatalkan ❌', 'Pesanan #22 dibatalkan karena bukti pembayaran tidak valid.', 'dibatalkan', 0, '2026-11-11 09:24:11'),
-(50, 9, 8, 24, 'Pesanan Sedang Dimasak 👨‍🍳', 'Pesanan #24 Anda sedang dimasak oleh Kedai Barokah (Jus Buah & Kopi Segar). Mohon ditunggu ya!', 'status_diproses', 0, '2026-11-11 09:24:17'),
-(51, 9, 8, 24, 'Makanan Siap! Segera Ambil 🎉', 'Pesanan #24 sudah matang dan siap diambil di stan Kedai Barokah (Jus Buah & Kopi Segar).', 'siap_diambil', 0, '2026-11-11 09:24:21'),
-(52, 9, 8, 24, 'Pesanan Selesai ✅', 'Terima kasih! Pesanan #24 dari Kedai Barokah (Jus Buah & Kopi Segar) telah selesai. Selamat menikmati hidangan Anda!', 'selesai', 0, '2026-11-11 09:24:24'),
 (53, 1, 8, 4, 'Makanan Siap! Segera Ambil 🎉', 'Pesanan #4 sudah matang dan siap diambil di stan Kedai Barokah (Jus Buah & Kopi Segar).', 'siap_diambil', 0, '2026-11-11 09:24:31'),
 (54, 6, 8, 3, 'Makanan Siap! Segera Ambil 🎉', 'Pesanan #3 sudah matang dan siap diambil di stan Kedai Barokah (Jus Buah & Kopi Segar).', 'siap_diambil', 0, '2026-11-11 09:24:33'),
 (55, 6, 8, 3, 'Pesanan Selesai ✅', 'Terima kasih! Pesanan #3 dari Kedai Barokah (Jus Buah & Kopi Segar) telah selesai. Selamat menikmati hidangan Anda!', 'selesai', 0, '2026-11-11 09:24:35'),
@@ -190,14 +182,7 @@ INSERT INTO `notifikasi` (`id`, `id_penerima`, `id_pengirim`, `id_pesanan`, `jud
 (58, 2, 8, 7, 'Pesanan Sedang Dimasak 👨‍🍳', 'Pesanan #7 Anda sedang dimasak oleh Kedai Barokah (Jus Buah & Kopi Segar). Mohon ditunggu ya!', 'status_diproses', 0, '2026-11-11 09:24:43'),
 (59, 2, 8, 7, 'Makanan Siap! Segera Ambil 🎉', 'Pesanan #7 sudah matang dan siap diambil di stan Kedai Barokah (Jus Buah & Kopi Segar).', 'siap_diambil', 0, '2026-11-11 09:24:45'),
 (60, 2, 8, 6, 'Makanan Siap! Segera Ambil 🎉', 'Pesanan #6 sudah matang dan siap diambil di stan Kedai Barokah (Jus Buah & Kopi Segar).', 'siap_diambil', 0, '2026-11-11 09:24:46'),
-(61, 2, 8, 14, 'Pesanan Sedang Dimasak 👨‍🍳', 'Pesanan #14 Anda sedang dimasak oleh Kedai Barokah (Jus Buah & Kopi Segar). Mohon ditunggu ya!', 'status_diproses', 0, '2026-11-11 09:24:51'),
 (62, 2, 8, 12, 'Pesanan Sedang Dimasak 👨‍🍳', 'Pesanan #12 Anda sedang dimasak oleh Kedai Barokah (Jus Buah & Kopi Segar). Mohon ditunggu ya!', 'status_diproses', 0, '2026-11-11 09:24:54'),
-(63, 8, 9, 25, 'Pesanan Baru Masuk! 🛎️', 'Pesanan #25 dari Nazril Febry Fadli sebesar Rp 5.000 telah masuk. Mohon segera diproses.', 'pesanan_baru', 0, '2026-11-11 09:26:07'),
-(64, 9, 8, 25, 'Pesanan Sedang Dimasak 👨‍🍳', 'Pesanan #25 Anda sedang dimasak oleh Kedai Barokah (Jus Buah & Kopi Segar). Mohon ditunggu ya!', 'status_diproses', 0, '2026-11-11 09:26:28'),
-(65, 9, 8, 25, 'Makanan Siap! Segera Ambil 🎉', 'Pesanan #25 sudah matang dan siap diambil di stan Kedai Barokah (Jus Buah & Kopi Segar).', 'siap_diambil', 0, '2026-11-11 09:26:34'),
-(66, 9, 8, 25, 'Pesanan Selesai ✅', 'Terima kasih! Pesanan #25 dari Kedai Barokah (Jus Buah & Kopi Segar) telah selesai. Selamat menikmati hidangan Anda!', 'selesai', 0, '2026-11-11 09:26:36'),
-(67, 2, 8, 14, 'Makanan Siap! Segera Ambil 🎉', 'Pesanan #14 sudah matang dan siap diambil di stan Kedai Barokah (Jus Buah & Kopi Segar).', 'siap_diambil', 0, '2026-11-11 09:26:50'),
-(68, 2, 8, 14, 'Pesanan Selesai ✅', 'Terima kasih! Pesanan #14 dari Kedai Barokah (Jus Buah & Kopi Segar) telah selesai. Selamat menikmati hidangan Anda!', 'selesai', 0, '2026-11-11 09:26:51'),
 (69, 2, 8, 12, 'Makanan Siap! Segera Ambil 🎉', 'Pesanan #12 sudah matang dan siap diambil di stan Kedai Barokah (Jus Buah & Kopi Segar).', 'siap_diambil', 0, '2026-11-11 09:26:54'),
 (70, 2, 8, 12, 'Pesanan Selesai ✅', 'Terima kasih! Pesanan #12 dari Kedai Barokah (Jus Buah & Kopi Segar) telah selesai. Selamat menikmati hidangan Anda!', 'selesai', 0, '2026-11-11 09:26:56'),
 (71, 2, 8, 11, 'Pesanan Sedang Dimasak 👨‍🍳', 'Pesanan #11 Anda sedang dimasak oleh Kedai Barokah (Jus Buah & Kopi Segar). Mohon ditunggu ya!', 'status_diproses', 0, '2026-11-11 09:26:57'),
@@ -254,7 +239,7 @@ CREATE TABLE `pesanan` (
   `id_tenant` int(11) NOT NULL,
   `total_harga` decimal(10,2) NOT NULL,
   `metode_pembayaran` varchar(50) NOT NULL,
-  `status_pembayaran` enum('Belum Dibayar','Menunggu Verifikasi','Sudah Dibayar','Bukti Ditolak','Dikembalikan') NOT NULL DEFAULT 'Belum Dibayar',
+  `status_pembayaran` enum('Menunggu Verifikasi','Sudah Dibayar','Bukti Ditolak','Dikembalikan') NOT NULL DEFAULT 'Menunggu Verifikasi',
   `status_pesanan` enum('Menunggu','Diproses','Siap Diambil','Selesai','Dibatalkan') NOT NULL DEFAULT 'Menunggu',
   `bukti_pembayaran` varchar(255) DEFAULT NULL,
   `catatan_verifikasi` varchar(255) DEFAULT NULL,
@@ -284,7 +269,6 @@ INSERT INTO `pesanan` (`id`, `id_mahasiswa`, `id_tenant`, `total_harga`, `metode
 (11, 2, 3, 8000.00, 'QRIS', 'Sudah Dibayar', 'Selesai', '/uploads/bukti-11-1793852769080.jpg', NULL, 0, NULL, NULL, NULL, '2026-11-05 11:26:09', '2026-11-11 09:27:00'),
 (12, 2, 3, 8000.00, 'QRIS', 'Sudah Dibayar', 'Selesai', '/uploads/bukti-12-1793853199100.jpg', NULL, 0, NULL, NULL, NULL, '2026-11-05 11:33:19', '2026-11-11 09:26:56'),
 (13, 2, 2, 12000.00, 'QRIS', 'Menunggu Verifikasi', 'Dibatalkan', '/uploads/bukti-13-1793892693318.jpg', NULL, 0, NULL, NULL, NULL, '2026-11-05 22:31:33', '2026-11-05 23:02:17'),
-(14, 2, 3, 5000.00, 'Tunai', 'Sudah Dibayar', 'Selesai', NULL, NULL, 0, NULL, NULL, NULL, '2026-11-05 22:31:52', '2026-11-11 09:26:51'),
 (15, 2, 3, 8000.00, 'QRIS', 'Menunggu Verifikasi', 'Dibatalkan', '/uploads/bukti-15-1793920064480.jpg', NULL, 0, NULL, NULL, NULL, '2026-11-06 06:07:44', '2026-11-06 06:38:10'),
 (16, 2, 2, 14000.00, 'QRIS', 'Bukti Ditolak', 'Dibatalkan', '/uploads/bukti-16-1794165756683.jpg', NULL, 1, 4, '2026-11-09 02:27:26', NULL, '2026-11-09 02:22:36', '2026-11-09 02:58:02'),
 (17, 2, 2, 12000.00, 'E-Wallet', 'Bukti Ditolak', 'Dibatalkan', '/uploads/bukti-17-1794165781367.png', NULL, 1, 4, '2026-11-09 02:27:46', NULL, '2026-11-09 02:23:01', '2026-11-09 02:27:46'),
@@ -293,9 +277,7 @@ INSERT INTO `pesanan` (`id`, `id_mahasiswa`, `id_tenant`, `total_harga`, `metode
 (20, 2, 3, 8000.00, 'QRIS', 'Bukti Ditolak', 'Dibatalkan', '/uploads/bukti-20-1794166640159.jpg', 'Gambar buram atau tidak jelas', 1, 8, '2026-11-09 02:39:31', NULL, '2026-11-09 02:37:20', '2026-11-09 03:10:02'),
 (21, 2, 3, 8000.00, 'QRIS', 'Sudah Dibayar', 'Selesai', '/uploads/bukti-21-1794166651126.jpg', NULL, 0, 8, '2026-11-09 02:39:05', NULL, '2026-11-09 02:37:31', '2026-11-09 02:39:21'),
 (22, 9, 3, 8000.00, 'QRIS', 'Bukti Ditolak', 'Dibatalkan', '/uploads/bukti-22-1794363775392.jpg', NULL, 1, 8, '2026-11-11 09:24:11', NULL, '2026-11-11 09:22:55', '2026-11-11 09:24:11'),
-(23, 9, 3, 8000.00, 'E-Wallet', 'Menunggu Verifikasi', 'Dibatalkan', '/uploads/bukti-23-1794364049780.jpg', 'Gambar buram atau tidak jelas', 1, 8, '2026-11-11 09:24:05', NULL, '2026-11-11 09:23:08', '2026-11-11 09:57:50'),
-(24, 9, 3, 8000.00, 'Tunai', 'Sudah Dibayar', 'Selesai', NULL, NULL, 0, NULL, NULL, NULL, '2026-11-11 09:23:18', '2026-11-11 09:24:24'),
-(25, 9, 3, 5000.00, 'Tunai', 'Sudah Dibayar', 'Selesai', NULL, NULL, 0, NULL, NULL, NULL, '2026-11-11 09:26:07', '2026-11-11 09:26:36');
+(23, 9, 3, 8000.00, 'E-Wallet', 'Menunggu Verifikasi', 'Dibatalkan', '/uploads/bukti-23-1794364049780.jpg', 'Gambar buram atau tidak jelas', 1, 8, '2026-11-11 09:24:05', NULL, '2026-11-11 09:23:08', '2026-11-11 09:57:50');
 
 -- --------------------------------------------------------
 
