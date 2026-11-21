@@ -17,7 +17,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import API, { API_BASE_URL, setServerIP } from '../api/axios';
+import API from '../api/axios';
+import PushNotifikasiCard from '../components/PushNotifikasiCard';
 import FotoMenu from '../components/FotoMenu';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -80,16 +81,6 @@ export default function MahasiswaMainScreen({ navigation, route }) {
   const [activeToastNotif, setActiveToastNotif] = useState(null);
   const [lastNotifId, setLastNotifId] = useState(null);
 
-  // ==========================================
-  // DATA STATES: PROFIL & MODAL IP
-  // ==========================================
-  const [modalIpVisible, setModalIpVisible] = useState(false);
-  const [currentBaseUrl, setCurrentBaseUrl] = useState(API_BASE_URL);
-  const [inputIp, setInputIp] = useState(
-    API_BASE_URL.replace(/^https?:\/\//, '').replace(/\/api\/?$/, '').split(':')[0] || '192.168.1.252'
-  );
-  const [pingTesting, setPingTesting] = useState(false);
-  const [pingStatus, setPingStatus] = useState(null);
 
   // ------------------------------------------
   // FETCH NOTIFIKASI
@@ -265,42 +256,12 @@ export default function MahasiswaMainScreen({ navigation, route }) {
     ]);
   };
 
-  const handleSaveIP = () => {
-    if (!inputIp.trim()) {
-      Alert.alert('Perhatian', 'Silakan masukkan alamat IP laptop/server.');
-      return;
-    }
-    const newUrl = setServerIP(inputIp.trim());
-    setCurrentBaseUrl(newUrl);
-    setModalIpVisible(false);
-    Alert.alert('Berhasil', `Alamat server berhasil disesuaikan ke:\n${newUrl}`);
-    fetchMenuData();
-    fetchOrders();
-  };
-
-  const handleTestPing = async () => {
-    setPingTesting(true);
-    setPingStatus(null);
-    try {
-      const res = await API.get('/health', { timeout: 4000 });
-      if (res.data.success) {
-        setPingStatus({ ok: true, msg: 'Server Backend Terhubung Normal! 🚀' });
-      } else {
-        setPingStatus({ ok: false, msg: 'Respon server tidak valid' });
-      }
-    } catch (err) {
-      setPingStatus({ ok: false, msg: 'Gagal terhubung: ' + err.message });
-    } finally {
-      setPingTesting(false);
-    }
-  };
-
   const openWhatsApp = (phone, tenantName) => {
     if (!phone) {
       Alert.alert('Info', `Nomor kontak untuk ${tenantName} belum tersedia.`);
       return;
     }
-        const cleanPhone = phone.replace(/\D/g, '').replace(/^0/, '62'); 
+    const cleanPhone = phone.replace(/\D/g, '').replace(/^0/, '62');
     const url = `https://wa.me/${cleanPhone}?text=Halo%20${encodeURIComponent(
       tenantName
     )},%20saya%20ingin%20menanyakan%20pesanan%20FastCanteen%20saya`;
@@ -412,25 +373,7 @@ export default function MahasiswaMainScreen({ navigation, route }) {
   // VIEW TAB 1: BERANDA
   // ==========================================
   const renderBerandaHeader = () => (
-    <View style={styles.headerContainer}>
-      {/* Banner Khusus jika Super Admin sedang pratinjau tampilan mahasiswa */}
-      {user?.peran === 'admin' && (
-        <View style={styles.adminBanner}>
-          <View style={styles.adminBannerLeft}>
-            <Ionicons name="shield-checkmark" size={14} color={COLORS.orange} />
-            <Text style={styles.adminBannerText}>Pratinjau Akun Super Admin</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.adminReturnButton}
-            onPress={() => navigation.navigate('SuperAdminDashboard')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.adminReturnText}>Kembali ke Admin</Text>
-            <Ionicons name="arrow-forward" size={12} color={COLORS.cardBackground} />
-          </TouchableOpacity>
-        </View>
-      )}
-
+    <View style={[styles.headerContainer, { paddingTop: insets.top + 12 }]}>
       {/* Top Greeting */}
       <View style={styles.topRow}>
         <View style={styles.userInfo}>
@@ -560,7 +503,7 @@ export default function MahasiswaMainScreen({ navigation, route }) {
 
     return (
       <View style={styles.menuCard}>
-                <FotoMenu foto={item.foto} style={styles.menuImage} />
+        <FotoMenu foto={item.foto} style={styles.menuImage} />
 
         <View style={styles.menuDetails}>
           <View style={styles.tenantTagRow}>
@@ -684,7 +627,7 @@ export default function MahasiswaMainScreen({ navigation, route }) {
   const renderPesananView = () => (
     <View style={styles.tabContentContainer}>
       {/* Top Header */}
-      <View style={styles.sectionHeaderBar}>
+      <View style={[styles.sectionHeaderBar, { paddingTop: insets.top + 12 }]}>
         <View>
           <Text style={styles.sectionHeaderTitle}>Pesanan Berjalan</Text>
           <Text style={styles.sectionHeaderSubtitle}>
@@ -922,7 +865,7 @@ export default function MahasiswaMainScreen({ navigation, route }) {
   const renderRiwayatView = () => (
     <View style={styles.tabContentContainer}>
       {/* Header Bar */}
-      <View style={styles.sectionHeaderBar}>
+      <View style={[styles.sectionHeaderBar, { paddingTop: insets.top + 12 }]}>
         <View>
           <Text style={styles.sectionHeaderTitle}>Riwayat Transaksi</Text>
           <Text style={styles.sectionHeaderSubtitle}>
@@ -1028,12 +971,12 @@ export default function MahasiswaMainScreen({ navigation, route }) {
                     <Text style={styles.stanLocation}>
                       {item.waktu_transaksi
                         ? new Date(item.waktu_transaksi).toLocaleString('id-ID', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          }) + ' WIB'
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        }) + ' WIB'
                         : 'Waktu Transaksi'}
                     </Text>
                   </View>
@@ -1135,17 +1078,17 @@ export default function MahasiswaMainScreen({ navigation, route }) {
   const renderProfilView = () => {
     const initials = user?.nama
       ? user.nama
-          .split(' ')
-          .map((n) => n[0])
-          .slice(0, 2)
-          .join('')
-          .toUpperCase()
+        .split(' ')
+        .map((n) => n[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase()
       : 'MH';
 
     return (
       <ScrollView
         style={styles.tabContentContainer}
-        contentContainerStyle={styles.profileScrollContent}
+        contentContainerStyle={[styles.profileScrollContent, { paddingTop: insets.top + 16 }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Profile Card Header */}
@@ -1214,76 +1157,8 @@ export default function MahasiswaMainScreen({ navigation, route }) {
           </View>
         </View>
 
-        {/* TABEL DATA USER (Revisi Poin 3) */}
-        <View style={styles.userTableSection}>
-          <View style={styles.tableCardHeader}>
-            <Ionicons name="server" size={16} color={COLORS.primaryDark} />
-            <Text style={styles.tableCardTitle}>Tabel User (Entitas `pengguna`)</Text>
-          </View>
-
-          <View style={styles.tableContainer}>
-            <View style={styles.tableHeaderRow}>
-              <Text style={[styles.tableColHeader, { flex: 1.2 }]}>Kolom</Text>
-              <Text style={[styles.tableColHeader, { flex: 2 }]}>Data Akun</Text>
-            </View>
-
-            <View style={styles.tableDataRow}>
-              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>id (PK)</Text>
-              <Text style={[styles.tableValText, { flex: 2, fontWeight: '700' }]}>#{user?.id || '1'}</Text>
-            </View>
-
-            <View style={[styles.tableDataRow, styles.tableDataRowAlt]}>
-              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>nama</Text>
-              <Text style={[styles.tableValText, { flex: 2 }]}>{user?.nama || '-'}</Text>
-            </View>
-
-            <View style={styles.tableDataRow}>
-              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>nim</Text>
-              <Text style={[styles.tableValText, { flex: 2 }]}>{user?.nim || '-'}</Text>
-            </View>
-
-            <View style={[styles.tableDataRow, styles.tableDataRowAlt]}>
-              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>email</Text>
-              <Text style={[styles.tableValText, { flex: 2 }]}>{user?.email || '-'}</Text>
-            </View>
-
-            <View style={styles.tableDataRow}>
-              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>no_hp</Text>
-              <Text style={[styles.tableValText, { flex: 2 }]}>{user?.no_hp || '-'}</Text>
-            </View>
-
-            <View style={[styles.tableDataRow, styles.tableDataRowAlt]}>
-              <Text style={[styles.tableKeyText, { flex: 1.2 }]}>peran</Text>
-              <View style={styles.roleTableBadge}>
-                <Text style={styles.roleTableBadgeText}>{user?.peran || 'mahasiswa'}</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* Pengaturan Jaringan & Server */}
-        <View style={styles.infoSection}>
-          <Text style={styles.infoSectionTitle}>Koneksi Server Backend</Text>
-
-          <View style={styles.serverCardRow}>
-            <View style={styles.infoIconBox}>
-              <Ionicons name="wifi-outline" size={18} color={COLORS.orange} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.infoLabel}>Alamat API Aktif</Text>
-              <Text style={styles.serverUrlText} numberOfLines={1}>
-                {currentBaseUrl}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.changeIpBtn}
-              onPress={() => setModalIpVisible(true)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.changeIpBtnText}>Ubah IP</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        {/* Pengaturan Notifikasi Push */}
+        <PushNotifikasiCard style={{ marginBottom: SPACING.lg }} />
 
         {/* Tentang Kantin Kampus */}
         <View style={styles.infoSection}>
@@ -1311,9 +1186,6 @@ export default function MahasiswaMainScreen({ navigation, route }) {
           <Text style={styles.logoutFullBtnText}>Keluar dari Akun</Text>
         </TouchableOpacity>
 
-        <Text style={styles.versionFooterText}>
-          FastCanteen Mobile v1.0.0 · PjBL Pemrograman Mobile UINSA
-        </Text>
       </ScrollView>
     );
   };
@@ -1475,113 +1347,6 @@ export default function MahasiswaMainScreen({ navigation, route }) {
       </View>
 
       {/* ==========================================
-          MODAL UBAH IP SERVER
-         ========================================== */}
-      <Modal
-        visible={modalIpVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setModalIpVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeaderRow}>
-              <Ionicons name="server-outline" size={22} color={COLORS.primaryDark} />
-              <Text style={styles.modalTitle}>Sesuaikan IP Backend</Text>
-            </View>
-
-            <Text style={styles.modalDesc}>
-              Pastikan HP dan Laptop terhubung ke Wi-Fi yang sama (misal jaringan Wi-Fi kos/kampus).
-            </Text>
-
-            <View style={styles.inputIpGroup}>
-              <Ionicons name="globe-outline" size={18} color={COLORS.textBody} />
-              <TextInput
-                style={styles.modalIpInput}
-                placeholder="Contoh: 192.168.1.252"
-                placeholderTextColor={COLORS.textSecondary}
-                value={inputIp}
-                onChangeText={setInputIp}
-                autoCapitalize="none"
-              />
-            </View>
-
-            {/* Quick preset buttons */}
-            <View style={styles.presetRow}>
-              <TouchableOpacity
-                style={styles.presetChip}
-                onPress={() => setInputIp('192.168.1.252')}
-              >
-                <Text style={styles.presetChipText}>IP Wi-Fi (192.168.1.252)</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.presetChip}
-                onPress={() => setInputIp('10.0.2.2')}
-              >
-                <Text style={styles.presetChipText}>Emulator (10.0.2.2)</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Status Ping */}
-            {pingStatus && (
-              <View
-                style={[
-                  styles.pingResultBanner,
-                  pingStatus.ok
-                    ? { backgroundColor: COLORS.badgeSuccess }
-                    : { backgroundColor: COLORS.dangerBg },
-                ]}
-              >
-                <Ionicons
-                  name={pingStatus.ok ? 'checkmark-circle' : 'alert-circle'}
-                  size={16}
-                  color={pingStatus.ok ? COLORS.textSuccessDark : COLORS.dangerDark}
-                />
-                <Text
-                  style={[
-                    styles.pingResultText,
-                    pingStatus.ok
-                      ? { color: COLORS.textSuccessDark }
-                      : { color: COLORS.dangerDark },
-                  ]}
-                >
-                  {pingStatus.msg}
-                </Text>
-              </View>
-            )}
-
-            <View style={styles.modalBtnRow}>
-              <TouchableOpacity
-                style={styles.pingBtn}
-                onPress={handleTestPing}
-                disabled={pingTesting}
-              >
-                {pingTesting ? (
-                  <ActivityIndicator size="small" color={COLORS.primaryDark} />
-                ) : (
-                  <Text style={styles.pingBtnText}>Tes Ping</Text>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => setModalIpVisible(false)}
-              >
-                <Text style={styles.modalCancelBtnText}>Tutup</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.modalSaveBtn}
-                onPress={handleSaveIP}
-              >
-                <Text style={styles.modalSaveBtnText}>Simpan</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ==========================================
           TOAST / FLOATING BANNER NOTIFIKASI REALTIME (Poin 7)
          ========================================== */}
       {activeToastNotif && (
@@ -1695,8 +1460,8 @@ export default function MahasiswaMainScreen({ navigation, route }) {
                             item.tipe === 'siap_diambil'
                               ? { backgroundColor: COLORS.badgeSuccess }
                               : item.tipe === 'status_diproses'
-                              ? { backgroundColor: COLORS.statusWaitingBg }
-                              : { backgroundColor: COLORS.badgeBackground },
+                                ? { backgroundColor: COLORS.statusWaitingBg }
+                                : { backgroundColor: COLORS.badgeBackground },
                           ]}
                         >
                           <Ionicons
@@ -1704,16 +1469,16 @@ export default function MahasiswaMainScreen({ navigation, route }) {
                               item.tipe === 'siap_diambil'
                                 ? 'bag-check'
                                 : item.tipe === 'status_diproses'
-                                ? 'flame'
-                                : 'chatbubble-ellipses'
+                                  ? 'flame'
+                                  : 'chatbubble-ellipses'
                             }
                             size={16}
                             color={
                               item.tipe === 'siap_diambil'
                                 ? COLORS.textSuccessDark
                                 : item.tipe === 'status_diproses'
-                                ? COLORS.queueOrange
-                                : COLORS.primaryDark
+                                  ? COLORS.queueOrange
+                                  : COLORS.primaryDark
                             }
                           />
                         </View>
@@ -1857,42 +1622,6 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.lg,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.inactiveElement,
-  },
-  adminBanner: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#FFF7ED',
-    borderWidth: 1,
-    borderColor: '#FED7AA',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: RADIUS.md,
-    marginBottom: SPACING.md,
-  },
-  adminBannerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  adminBannerText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.brownDark,
-  },
-  adminReturnButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: COLORS.primaryDark,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: RADIUS.sm,
-  },
-  adminReturnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.cardBackground,
   },
   topRow: {
     flexDirection: 'row',
@@ -2644,28 +2373,6 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     marginTop: 1,
   },
-  serverCardRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  serverUrlText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.primaryDark,
-    marginTop: 2,
-  },
-  changeIpBtn: {
-    backgroundColor: COLORS.primaryDark,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: RADIUS.md,
-  },
-  changeIpBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.cardBackground,
-  },
   logoutFullBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2833,54 +2540,11 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginBottom: SPACING.md,
   },
-  inputIpGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.inputBackground,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: SPACING.md,
-    height: 44,
-    borderWidth: 1,
-    borderColor: COLORS.inactiveElement,
-    gap: 8,
-    marginBottom: SPACING.sm,
-  },
-  modalIpInput: {
-    flex: 1,
-    fontSize: 13,
-    color: COLORS.textPrimary,
-  },
   presetRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
     marginBottom: SPACING.md,
-  },
-  presetChip: {
-    backgroundColor: COLORS.inputBackground,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: RADIUS.sm,
-    borderWidth: 1,
-    borderColor: COLORS.inactiveElement,
-  },
-  presetChipText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: COLORS.textBody,
-  },
-  pingResultBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: SPACING.sm,
-    borderRadius: RADIUS.sm,
-    gap: 8,
-    marginBottom: SPACING.md,
-  },
-  pingResultText: {
-    fontSize: 11,
-    fontWeight: '700',
-    flex: 1,
   },
   modalBtnRow: {
     flexDirection: 'row',
@@ -2888,17 +2552,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     marginTop: SPACING.sm,
-  },
-  pingBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.inputBackground,
-  },
-  pingBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.primaryDark,
   },
   modalCancelBtn: {
     paddingHorizontal: 12,
@@ -2978,80 +2631,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: COLORS.danger,
-  },
-  // Revisi Poin 3: Tabel User (pengguna)
-  userTableSection: {
-    backgroundColor: COLORS.cardBackground,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.md,
-    marginHorizontal: SPACING.md,
-    marginBottom: SPACING.md,
-    ...SHADOWS.card,
-  },
-  tableCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: SPACING.sm,
-  },
-  tableCardTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.primaryDark,
-  },
-  tableContainer: {
-    borderWidth: 1,
-    borderColor: COLORS.inactiveElement,
-    borderRadius: RADIUS.sm,
-    overflow: 'hidden',
-  },
-  tableHeaderRow: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.badgeBackground,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.inactiveElement,
-  },
-  tableColHeader: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: COLORS.textPrimary,
-    textTransform: 'uppercase',
-  },
-  tableDataRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.inactiveElement,
-  },
-  tableDataRowAlt: {
-    backgroundColor: COLORS.inputBackground,
-  },
-  tableKeyText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    fontWeight: '600',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  tableValText: {
-    fontSize: 12,
-    color: COLORS.textPrimary,
-  },
-  roleTableBadge: {
-    backgroundColor: COLORS.badgeBackground,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: RADIUS.full,
-  },
-  roleTableBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.goldenBrown,
-    textTransform: 'capitalize',
   },
   // Revisi Poin 7: Floating Toast Notifikasi
   floatingToast: {

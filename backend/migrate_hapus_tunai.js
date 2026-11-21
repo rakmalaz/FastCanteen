@@ -15,6 +15,7 @@ async function jalankan() {
     const dbName = process.env.DB_NAME || 'fastcanteen_db';
     const conn = await mysql.createConnection({
         host: process.env.DB_HOST || 'localhost',
+        port: Number(process.env.DB_PORT) || 3307,
         user: process.env.DB_USER || 'root',
         password: process.env.DB_PASSWORD || '',
         database: dbName,

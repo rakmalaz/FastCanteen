@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -21,6 +22,7 @@ import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../constants/theme';
 
 export default function SuperAdminDashboardScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
 
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'tenants' | 'orders' | 'students'
@@ -246,7 +248,7 @@ export default function SuperAdminDashboardScreen({ navigation }) {
   return (
     <View style={styles.container}>
       {/* Header Utama Super Admin */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <View style={styles.headerTop}>
           <View style={styles.headerTitleContainer}>
             <View style={styles.badgeAdmin}>
@@ -262,32 +264,6 @@ export default function SuperAdminDashboardScreen({ navigation }) {
           <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
             <Ionicons name="log-out-outline" size={20} color={COLORS.danger} />
           </TouchableOpacity>
-        </View>
-
-        {/* Quick View Role Switcher (Navigasi Peran untuk Super Admin) */}
-        <View style={styles.rolePreviewContainer}>
-          <Text style={styles.rolePreviewLabel}>Pratinjau Tampilan Lain:</Text>
-          <View style={styles.rolePreviewRow}>
-            <TouchableOpacity
-              style={styles.previewBtn}
-              onPress={() => navigation.navigate('Menu')}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="school-outline" size={14} color={COLORS.primaryDark} />
-              <Text style={styles.previewBtnText}>Tampilan Mahasiswa</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.previewBtn, { borderColor: COLORS.goldenBrown }]}
-              onPress={() => navigation.navigate('TenantDashboard')}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="storefront-outline" size={14} color={COLORS.goldenBrown} />
-              <Text style={[styles.previewBtnText, { color: COLORS.goldenBrown }]}>
-                Tampilan Tenant
-              </Text>
-            </TouchableOpacity>
-          </View>
         </View>
 
         {/* Navigation Tabs */}
@@ -506,10 +482,6 @@ export default function SuperAdminDashboardScreen({ navigation }) {
                     <Text style={styles.sectionSubtitle}>
                       4 Pengembang & Penanggung Jawab Sistem PjBL UIN Sunan Ampel
                     </Text>
-                  </View>
-                  <View style={styles.adminCounterChip}>
-                    <Ionicons name="people" size={14} color={COLORS.primaryDark} />
-                    <Text style={styles.adminCounterText}>4 Admin</Text>
                   </View>
                 </View>
 
@@ -932,10 +904,11 @@ export default function SuperAdminDashboardScreen({ navigation }) {
       <Modal
         visible={!!statTenant}
         animationType="slide"
+        statusBarTranslucent
         onRequestClose={() => setStatTenant(null)}
       >
         <View style={styles.statModalScreen}>
-          <View style={styles.statModalHeader}>
+          <View style={[styles.statModalHeader, { paddingTop: insets.top + 12 }]}>
             <View style={{ flex: 1 }}>
               <Text style={styles.statModalTitle} numberOfLines={1}>
                 Statistik · {statTenant?.nama_tenant}
@@ -1159,39 +1132,6 @@ const styles = StyleSheet.create({
     padding: 8,
     backgroundColor: COLORS.dangerBg,
     borderRadius: RADIUS.md,
-  },
-  rolePreviewContainer: {
-    backgroundColor: '#F7F7F0',
-    marginHorizontal: SPACING.lg,
-    padding: SPACING.sm,
-    borderRadius: RADIUS.md,
-    marginBottom: SPACING.sm,
-  },
-  rolePreviewLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
-    marginBottom: 6,
-  },
-  rolePreviewRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  previewBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.cardBackground,
-    borderWidth: 1,
-    borderColor: COLORS.primaryDark,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: RADIUS.sm,
-    gap: 4,
-  },
-  previewBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.primaryDark,
   },
   tabScroll: {
     paddingHorizontal: SPACING.lg,

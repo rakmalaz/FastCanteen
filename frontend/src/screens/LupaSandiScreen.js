@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -21,6 +22,7 @@ const MIN_SANDI = 6;
 //  1) verifikasi identitas (email/NIM + nomor HP terdaftar)
 //  2) buat kata sandi baru
 export default function LupaSandiScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [langkah, setLangkah] = useState(1);
   const [identitas, setIdentitas] = useState('');
   const [noHp, setNoHp] = useState('');
@@ -91,7 +93,7 @@ export default function LupaSandiScreen({ navigation }) {
       style={styles.container}
     >
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 24 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >

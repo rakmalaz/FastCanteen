@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -16,6 +17,7 @@ import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../constants/theme';
 
 export default function RegisterScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const { register, loading } = useAuth();
   const [nama, setNama] = useState('');
   const [nim, setNim] = useState('');
@@ -69,7 +71,7 @@ export default function RegisterScreen({ navigation }) {
       style={styles.container}
     >
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 20 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >

@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -15,6 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import API from '../api/axios';
+import FotoMenu from '../components/FotoMenu';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../constants/theme';
@@ -89,6 +91,7 @@ function SummaryRow({ label, value, last, children }) {
 }
 
 export default function CartCheckoutScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const {
     items,
@@ -314,7 +317,7 @@ export default function CartCheckoutScreen({ navigation }) {
   return (
     <View style={styles.container}>
       {/* Top Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity
           style={styles.backBtn}
           onPress={() => navigation.goBack()}

@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext } from 'react';
 import API, { setAuthToken } from '../api/axios';
+import { daftarPushOtomatis, lepasPushSaatLogout } from '../utils/pushNotifications';
 
 const AuthContext = createContext();
 
@@ -14,6 +15,7 @@ export const AuthProvider = ({ children }) => {
       if (response.data.success) {
         setAuthToken(response.data.token);
         setUser(response.data.data);
+        daftarPushOtomatis(response.data.data.id); // daftarkan perangkat untuk push (tidak menunggu)
         return { success: true, user: response.data.data };
       }
       return { success: false, message: response.data.message || 'Login gagal' };
@@ -33,6 +35,7 @@ export const AuthProvider = ({ children }) => {
       if (response.data.success) {
         setAuthToken(response.data.token);
         setUser(response.data.data);
+        daftarPushOtomatis(response.data.data.id); // daftarkan perangkat untuk push (tidak menunggu)
         return { success: true, user: response.data.data };
       }
       return { success: false, message: response.data.message || 'Registrasi gagal' };
@@ -45,7 +48,9 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    // Lepas token push sebelum token login dihapus; maksimal 1,5 detik agar logout tidak tertahan jaringan
+    await Promise.race([lepasPushSaatLogout(), new Promise((r) => setTimeout(r, 1500))]);
     setAuthToken(null);
     setUser(null);
   };

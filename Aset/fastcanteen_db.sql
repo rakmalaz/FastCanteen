@@ -429,6 +429,22 @@ ALTER TABLE `pesanan`
 --
 ALTER TABLE `tenant`
   ADD CONSTRAINT `fk_tenant_admin` FOREIGN KEY (`id_admin_pendaftar`) REFERENCES `pengguna` (`id`) ON DELETE CASCADE;
+--
+-- Table structure for table `push_tokens`
+--
+
+CREATE TABLE IF NOT EXISTS `push_tokens` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `expo_push_token` varchar(255) NOT NULL,
+  `dibuat_pada` datetime NOT NULL DEFAULT current_timestamp(),
+  `diperbarui_pada` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_push_token` (`expo_push_token`),
+  KEY `idx_push_user` (`user_id`),
+  CONSTRAINT `fk_push_user` FOREIGN KEY (`user_id`) REFERENCES `pengguna` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 SET FOREIGN_KEY_CHECKS=1;
 COMMIT;
 

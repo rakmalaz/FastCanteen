@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -10,25 +11,17 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../constants/theme';
-import { API_BASE_URL, setServerIP } from '../api/axios';
 
 export default function LoginScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const { login, loading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [secureText, setSecureText] = useState(true);
-
-  // Konfigurasi Server IP
-  const [currentBaseUrl, setCurrentBaseUrl] = useState(API_BASE_URL);
-  const [modalIpVisible, setModalIpVisible] = useState(false);
-  const [inputIp, setInputIp] = useState(
-    API_BASE_URL.replace(/^https?:\/\//, '').replace(/\/api\/?$/, '').split(':')[0] || '192.168.1.252'
-  );
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -52,21 +45,10 @@ export default function LoginScreen({ navigation }) {
         res.message?.toLowerCase().includes('terjadi kendala') ||
         res.message?.toLowerCase().includes('gagal terhubung')
       ) {
-        errorMsg = `Gagal terhubung ke server backend FastCanteen (${currentBaseUrl}).\n\n1. Pastikan server backend sudah dijalankan (npm run dev atau node server.js)\n2. Pastikan HP dan Laptop terhubung ke Wi-Fi yang sama.\n3. Jika IP Wi-Fi laptop berubah, ketuk tombol 'Ubah IP Server' di bawah untuk menyesuaikannya.`;
+        errorMsg = 'Gagal terhubung ke server backend FastCanteen.\n\n1. Pastikan server backend sudah dijalankan (node server.js)\n2. Pastikan HP dan laptop terhubung ke Wi-Fi yang sama.';
       }
       Alert.alert('Login Gagal', errorMsg);
     }
-  };
-
-  const handleSaveIP = () => {
-    if (!inputIp.trim()) {
-      Alert.alert('Perhatian', 'Masukkan alamat IP host laptop.');
-      return;
-    }
-    const updatedUrl = setServerIP(inputIp.trim());
-    setCurrentBaseUrl(updatedUrl);
-    setModalIpVisible(false);
-    Alert.alert('Berhasil', `Alamat backend diperbarui ke:\n${updatedUrl}`);
   };
 
   return (
@@ -75,7 +57,7 @@ export default function LoginScreen({ navigation }) {
       style={styles.container}
     >
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 24 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -96,17 +78,6 @@ export default function LoginScreen({ navigation }) {
               <Ionicons name="location-sharp" size={14} color={COLORS.primaryDark} />
               <Text style={styles.locationText}>Kantin Belakang Lt. 1 & 2</Text>
             </View>
-
-            <TouchableOpacity
-              style={styles.serverChip}
-              onPress={() => setModalIpVisible(true)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="wifi" size={13} color={COLORS.textSuccessTeal} />
-              <Text style={styles.serverChipText}>
-                {currentBaseUrl.replace('http://', '').replace('/api', '')} · Ubah IP
-              </Text>
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -205,85 +176,7 @@ export default function LoginScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Footer info */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            PjBL Pemrograman Mobile · SIF125113 · Kelompok 3 UINSA
-          </Text>
-        </View>
       </ScrollView>
-
-      {/* Modal Pengaturan IP Server */}
-      <Modal
-        visible={modalIpVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setModalIpVisible(false)}
-      >
-        <View style={styles.ipModalOverlay}>
-          <View style={styles.ipModalCard}>
-            <View style={styles.ipModalHeader}>
-              <Ionicons name="settings-outline" size={20} color={COLORS.primaryDark} />
-              <Text style={styles.ipModalTitle}>Konfigurasi IP Backend</Text>
-            </View>
-
-            <Text style={styles.ipModalDesc}>
-              Sesuaikan alamat IP Wi-Fi laptop jika berubah saat berpindah jaringan (misal: di kampus atau di rumah).
-            </Text>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Alamat IP Laptop / Port 5000</Text>
-              <View style={styles.inputContainer}>
-                <Ionicons
-                  name="globe-outline"
-                  size={18}
-                  color={COLORS.textBody}
-                  style={styles.inputIcon}
-                />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Contoh: 192.168.1.252"
-                  placeholderTextColor={COLORS.textSecondary}
-                  value={inputIp}
-                  onChangeText={setInputIp}
-                  autoCapitalize="none"
-                />
-              </View>
-            </View>
-
-            <View style={styles.ipPresetRow}>
-              <TouchableOpacity
-                style={styles.ipPresetBtn}
-                onPress={() => setInputIp('192.168.1.252')}
-              >
-                <Text style={styles.ipPresetText}>IP Sekarang (192.168.1.252)</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.ipPresetBtn}
-                onPress={() => setInputIp('10.0.2.2')}
-              >
-                <Text style={styles.ipPresetText}>Emulator (10.0.2.2)</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.ipModalActions}>
-              <TouchableOpacity
-                style={styles.ipModalCancelBtn}
-                onPress={() => setModalIpVisible(false)}
-              >
-                <Text style={styles.ipModalCancelText}>Batal</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.ipModalSaveBtn}
-                onPress={handleSaveIP}
-              >
-                <Text style={styles.ipModalSaveText}>Simpan & Terapkan</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -366,22 +259,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: COLORS.primaryDark,
-    marginLeft: 4,
-  },
-  serverChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E8F5E9',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: 5,
-    borderRadius: RADIUS.full,
-    borderWidth: 1,
-    borderColor: '#C8E6C9',
-  },
-  serverChipText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.textSuccessEmerald,
     marginLeft: 4,
   },
   card: {
@@ -474,78 +351,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.textSecondary,
     textAlign: 'center',
-  },
-  ipModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: SPACING.xl,
-  },
-  ipModalCard: {
-    width: '100%',
-    backgroundColor: COLORS.cardBackground,
-    borderRadius: RADIUS.xl,
-    padding: SPACING.xl,
-    ...SHADOWS.card,
-  },
-  ipModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  ipModalTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: COLORS.textPrimary,
-  },
-  ipModalDesc: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.md,
-    lineHeight: 17,
-  },
-  ipPresetRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: SPACING.lg,
-  },
-  ipPresetBtn: {
-    backgroundColor: COLORS.badgeBackground,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: RADIUS.sm,
-  },
-  ipPresetText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.primaryDark,
-  },
-  ipModalActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 12,
-  },
-  ipModalCancelBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: RADIUS.md,
-  },
-  ipModalCancelText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
-  },
-  ipModalSaveBtn: {
-    backgroundColor: COLORS.primaryDark,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: RADIUS.md,
-  },
-  ipModalSaveText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.cardBackground,
   },
 });

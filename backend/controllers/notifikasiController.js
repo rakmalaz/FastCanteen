@@ -256,6 +256,21 @@ exports.kirimNotifikasiUji = async (req, res) => {
             return res.status(502).json({ success: false, message: 'Gagal menghubungi Expo Push Service', error: hasil.error });
         }
 
+        const tiketGagal = (hasil.tiket || []).filter((t) => t && t.status === 'error');
+        if (hasil.terkirim === 0 && tiketGagal.length > 0) {
+            const kode = tiketGagal[0].details?.error || 'Error';
+            const petunjuk = {
+                InvalidCredentials: 'Kunci FCM V1 belum diunggah ke EAS (jalankan: npx eas credentials).',
+                MismatchSenderId: 'google-services.json tidak cocok dengan kredensial FCM di EAS.',
+                DeviceNotRegistered: 'Token perangkat sudah tidak aktif. Matikan lalu nyalakan lagi saklar notifikasi.',
+            }[kode];
+            return res.status(502).json({
+                success: false,
+                message: `Expo menolak pengiriman (${kode}). ${petunjuk || tiketGagal[0].message || ''}`.trim(),
+                hasil
+            });
+        }
+
         res.status(200).json({ success: true, message: 'Notifikasi uji dikirim', hasil });
     } catch (error) {
         console.error('Error saat mengirim notifikasi uji:', error);

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -21,6 +22,7 @@ import * as ImagePicker from 'expo-image-picker';
 import API, { resolveBuktiUrl } from '../api/axios';
 import FotoMenu from '../components/FotoMenu';
 import StatistikPanel from '../components/StatistikPanel';
+import PushNotifikasiCard from '../components/PushNotifikasiCard';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../constants/theme';
 
@@ -33,6 +35,7 @@ const ALASAN_TOLAK = [
 ];
 
 export default function TenantDashboardScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
   const tenantId = user?.tenant?.id ?? (user?.peran === 'admin' ? 1 : undefined);
   const tenantName = user?.tenant?.nama_tenant || 'Stan Kantin UINSA';
@@ -40,6 +43,7 @@ export default function TenantDashboardScreen({ navigation }) {
     user?.tenant?.lokasi_stan || 'Kantin Belakang Lt. 1 UINSA Kampus 2';
 
   const [activeTab, setActiveTab] = useState('orders'); // 'orders' | 'menus' | 'keuangan'
+  const [pushModalVisible, setPushModalVisible] = useState(false);
   const [statistik, setStatistik] = useState(null);
   const [statistikHari, setStatistikHari] = useState(7);
   const [statistikLoading, setStatistikLoading] = useState(false);
@@ -403,32 +407,14 @@ export default function TenantDashboardScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      {/* Banner Khusus jika Super Admin sedang meninjau tampilan tenant */}
-      {user?.peran === 'admin' && (
-        <View style={styles.adminBanner}>
-          <View style={styles.adminBannerLeft}>
-            <Ionicons name="shield-checkmark" size={14} color={COLORS.orange} />
-            <Text style={styles.adminBannerText}>Pratinjau Tampilan Tenant Stan Kantin</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.adminReturnButton}
-            onPress={() => navigation.navigate('SuperAdminDashboard')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.adminReturnText}>Kembali ke Admin</Text>
-            <Ionicons name="arrow-forward" size={12} color={COLORS.cardBackground} />
-          </TouchableOpacity>
-        </View>
-      )}
-
       {/* Header Dashboard Tenant */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <View style={styles.headerLeft}>
           <View style={styles.tenantBadgeIcon}>
             <Ionicons name="storefront" size={20} color={COLORS.orange} />
           </View>
-          <View>
-            <Text style={styles.tenantTitle} numberOfLines={1}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.tenantTitle} numberOfLines={2}>
               {tenantName}
             </Text>
             <Text style={styles.tenantLocationText} numberOfLines={1}>
@@ -437,14 +423,47 @@ export default function TenantDashboardScreen({ navigation }) {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.logoutBtn}
-          onPress={handleLogout}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="log-out-outline" size={20} color={COLORS.danger} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.logoutBtn}
+            onPress={() => setPushModalVisible(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="notifications-outline" size={20} color={COLORS.primaryDark} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.logoutBtn}
+            onPress={handleLogout}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="log-out-outline" size={20} color={COLORS.danger} />
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Modal Pengaturan Notifikasi Push */}
+      <Modal
+        visible={pushModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPushModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.pushModalOverlay}
+          activeOpacity={1}
+          onPress={() => setPushModalVisible(false)}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.pushModalBox}>
+            <View style={styles.pushModalHeader}>
+              <Text style={styles.pushModalTitle}>Pengaturan Notifikasi</Text>
+              <TouchableOpacity onPress={() => setPushModalVisible(false)}>
+                <Ionicons name="close" size={22} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <PushNotifikasiCard style={{ elevation: 0, shadowOpacity: 0, padding: 0 }} />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Ringkasan Penjualan Hari Ini (US-13) */}
       <View style={styles.summaryContainer}>
@@ -486,12 +505,13 @@ export default function TenantDashboardScreen({ navigation }) {
             color={activeTab === 'orders' ? COLORS.cardBackground : COLORS.textBody}
           />
           <Text
+            numberOfLines={1}
             style={[
               styles.mainTabText,
               activeTab === 'orders' && styles.mainTabTextActive,
             ]}
           >
-            Antrean Masuk ({orders.length})
+            Antrean ({orders.length})
           </Text>
         </TouchableOpacity>
 
@@ -505,12 +525,13 @@ export default function TenantDashboardScreen({ navigation }) {
             color={activeTab === 'menus' ? COLORS.cardBackground : COLORS.textBody}
           />
           <Text
+            numberOfLines={1}
             style={[
               styles.mainTabText,
               activeTab === 'menus' && styles.mainTabTextActive,
             ]}
           >
-            Kelola Menu ({menus.length})
+            Menu ({menus.length})
           </Text>
         </TouchableOpacity>
 
@@ -524,6 +545,7 @@ export default function TenantDashboardScreen({ navigation }) {
             color={activeTab === 'keuangan' ? COLORS.cardBackground : COLORS.textBody}
           />
           <Text
+            numberOfLines={1}
             style={[
               styles.mainTabText,
               activeTab === 'keuangan' && styles.mainTabTextActive,
@@ -1325,6 +1347,40 @@ const styles = StyleSheet.create({
     color: COLORS.badgeBackground,
     marginTop: 1,
   },
+  modalLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 6,
+  },
+  headerActions: {
+    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pushModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    padding: SPACING.xl,
+  },
+  pushModalBox: {
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
+  },
+  pushModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+  },
+  pushModalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.textPrimary,
+  },
   logoutBtn: {
     padding: 8,
     backgroundColor: COLORS.cardBackground,
@@ -1371,12 +1427,13 @@ const styles = StyleSheet.create({
   },
   mainTabBtn: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 9,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
     borderRadius: RADIUS.sm,
-    gap: 6,
+    gap: 3,
   },
   mainTabBtnActive: {
     backgroundColor: COLORS.primaryDark,
@@ -1862,43 +1919,6 @@ const styles = StyleSheet.create({
     color: COLORS.cardBackground,
     fontSize: 14,
     fontWeight: '700',
-  },
-  adminBanner: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#FFF8E1',
-    borderWidth: 1,
-    borderColor: '#FFE082',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginHorizontal: SPACING.lg,
-    marginTop: Platform.OS === 'ios' ? 48 : 28,
-    borderRadius: RADIUS.md,
-  },
-  adminBannerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  adminBannerText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.brownDark,
-  },
-  adminReturnButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primaryDark,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: RADIUS.sm,
-    gap: 4,
-  },
-  adminReturnText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.cardBackground,
   },
   buktiBtn: {
     flexDirection: 'row',

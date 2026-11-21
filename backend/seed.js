@@ -1,4 +1,5 @@
 const db = require('./config/db');
+const bcrypt = require('bcryptjs');
 
 async function seed() {
     try {
@@ -30,9 +31,10 @@ async function seed() {
         ];
 
         for (const u of users) {
+            const [nama, nim, email, sandi, peran, noHp] = u;
             await db.query(
                 'INSERT INTO pengguna (nama, nim, email, kata_sandi, peran, no_hp) VALUES (?, ?, ?, ?, ?, ?)',
-                u
+                [nama, nim, email, await bcrypt.hash(sandi, 10), peran, noHp]
             );
         }
         console.log('👤 Akun Pengguna (Mahasiswa, Tenant, Super Admin) berhasil dibuat');
